@@ -457,7 +457,11 @@
     { kw:['샐러드'], type:['기타'], taste:'순한맛', cuisine:'양식', menu:'샐러드' },
     { kw:['쌀국수','베트남'], type:['면','국물'], taste:'매운맛', cuisine:'기타', menu:'쌀국수' },
     { kw:['마라'], type:['국물','면'], taste:'매운맛', cuisine:'중식', menu:'마라탕' },
-    { kw:['곱창','막창'], type:['구이'], taste:'매운맛', cuisine:'한식', menu:'곱창구이' },
+    // 곱창/막창은 소금구이(안 매움)로 먹는 게 기본형이라, 매운맛 표기가 붙은 경우만 매운맛으로
+    // 잡는다. 이 규칙을 일반 규칙("곱창","막창")보다 먼저 둬야 한다(선매칭 우선 — 예: "양념막창"은
+    // "막창"에도 걸리지만 "양념막창" 키워드가 더 먼저 나와야 매운맛으로 잡힌다).
+    { kw:['양념곱창','양념막창','불막창','불곱창','매운곱창','매운막창'], type:['구이'], taste:'매운맛', cuisine:'한식', menu:'양념막창' },
+    { kw:['곱창','막창','대창'], type:['구이'], taste:'보통', cuisine:'한식', menu:'곱창구이' },
     { kw:['김밥'], type:['분식'], taste:'순한맛', cuisine:'한식', menu:'김밥' }
   ];
 
@@ -924,8 +928,13 @@
       return null;
     });
   }
-  function fetchMenuFor(placeId){ return fetchMenuFrom('placeId', placeId, 'kakao', 'kakao-live'); }
-  function fetchNaverMenuFor(placeId){ return fetchMenuFrom('naverPlaceId', placeId, 'naver', 'naver-live'); }
+  // 캐시 네임스페이스에 태그 규칙 버전을 붙여둔다. TAG_RULES의 판정 결과(형태/맛)가 바뀌는
+  // 수정을 할 때마다 이 버전을 올리면, 예전 판정으로 이미 캐싱된 메뉴가 새 코드에서도 그대로
+  // 재사용되는 일 없이 자동으로 무효화되어 다시 조회·재태깅된다(실사용 중 "왜 매운맛 필터에
+  // 소막창이 나오냐"처럼, 캐시에 이미 잘못 태깅된 메뉴가 박혀있던 문제가 있었음).
+  var TAG_RULES_VERSION = 'v2';
+  function fetchMenuFor(placeId){ return fetchMenuFrom('placeId', placeId, 'kakao-'+TAG_RULES_VERSION, 'kakao-live'); }
+  function fetchNaverMenuFor(placeId){ return fetchMenuFrom('naverPlaceId', placeId, 'naver-'+TAG_RULES_VERSION, 'naver-live'); }
   // rawList(mergeRecord 이전의 원본 배열)를 동시성 제한을 걸어 순회하며 메뉴 목록을 채워 넣는다.
   // 네이버 place id가 수동으로 입력돼 있으면(대개 상점주가 더 잘 관리해둠) 그쪽을 우선 시도하고,
   // 없거나 실패하면 카카오 실시간 메뉴로 폴백한다. 배열 원소를 직접 mutate하므로, 끝난 뒤
