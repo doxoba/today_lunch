@@ -412,17 +412,22 @@
     return 0;
   }
   // 카카오 category_name은 "음식점 > 중식 > 중국요리"처럼 "대분류 > 중분류 > 소분류" 구조라,
-  // 중분류가 사실상 정확한 업종 정보다. TAG_RULES 키워드 매칭은 상호명 표기가 제각각이라
-  // 놓치는 경우가 있으므로(예: "중화요리"는 찾지만 "중국요리"는 못 찾는 식), 카카오가 이미 알려준
-  // 이 값을 최우선으로 신뢰하고 cuisine을 덮어쓴다. type/taste/signatureMenu는 카테고리만으로는
-  // 알 수 없어 계속 키워드 추정에 의존한다.
-  var CATEGORY_CUISINE_MAP = {
-    '한식':'한식', '중식':'중식', '일식':'일식', '양식':'양식',
-    '카페':'카페-디저트', '디저트':'카페-디저트', '제과,베이커리':'카페-디저트'
-  };
-  function categoryMidTier(categoryName){
-    var parts = (categoryName||'').split('>').map(function(s){ return s.trim(); });
-    return parts.length >= 2 ? parts[1] : '';
+  // 중분류/소분류에 업종이 사실상 그대로 적혀있는 경우가 많다(단, "음식점 > 뷔페 > 한식뷔페"처럼
+  // 중분류 자체는 업종이 아니고 소분류에만 적혀있는 경우도 있음). 그래서 중분류만 보지 않고
+  // category_name 전체 문자열에서 키워드를 찾는다. TAG_RULES 키워드 매칭은 상호명 표기가
+  // 제각각이라 놓치는 경우가 있으므로(예: "중화요리"는 찾지만 "중국요리"는 못 찾는 식), 카카오가
+  // 이미 분류해준 이 값을 최우선으로 신뢰하고 cuisine을 덮어쓴다. type/taste/signatureMenu는
+  // 카테고리만으로는 알 수 없어 계속 키워드 추정에 의존한다.
+  var CUISINE_CATEGORY_KEYWORDS = [
+    ['한식','한식'], ['중식','중식'], ['일식','일식'], ['양식','양식'],
+    ['카페','카페-디저트'], ['디저트','카페-디저트'], ['베이커리','카페-디저트']
+  ];
+  function inferCuisineFromCategory(categoryName){
+    var cat = categoryName || '';
+    for(var i=0;i<CUISINE_CATEGORY_KEYWORDS.length;i++){
+      if(cat.indexOf(CUISINE_CATEGORY_KEYWORDS[i][0]) !== -1) return CUISINE_CATEGORY_KEYWORDS[i][1];
+    }
+    return '';
   }
   function autoFill(categoryName, name){
     var hay = (categoryName||'') + ' ' + (name||'');
@@ -437,7 +442,7 @@
       }
     }
     if(!result){ result = { type:['기타'], taste:'보통', cuisine:'한식', signatureMenu:'' }; }
-    var mappedCuisine = CATEGORY_CUISINE_MAP[categoryMidTier(categoryName)];
+    var mappedCuisine = inferCuisineFromCategory(categoryName);
     if(mappedCuisine){ result.cuisine = mappedCuisine; }
     return result;
   }
