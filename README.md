@@ -6,7 +6,7 @@
 
 This tool helps you decide what to eat for lunch by recommending nearby restaurants based on your mood and preferences. It features:
 
-- **Smart filtering**: Multi-select by food type (면/밥/국물), taste level (매운맛/순한맛), and cuisine (한식/중식/일식/양식)
+- **Smart filtering**: Multi-select by food type (면/밥/국물), taste level (매운맛/순한맛), and category (구내식당/한식뷔페, 국밥/탕/찌개, 제육/백반/정식, 중식, 면류/분식, 돈까스/일식/양식, 아시안/세계요리, 간편식/식단관리)
 - **Adjustable radius**: Pick a search radius from 100m to 500m in 100m steps (default 300m); changing it re-searches immediately
 - **Live restaurant data**: Real-time search using Kakao Maps API, adaptively subdividing the search area so dense areas (like Gasan) don't silently lose restaurants to Kakao's 45-result cap
 - **Intelligent filtering**: Automatically filters to restaurants on the west side of Seoul Metro Line 1 only
@@ -140,7 +140,7 @@ The accordion panel at the bottom shows all nearby restaurants:
 
 **Taste Level (맛)**: 매운맛 · 순한맛 · 보통
 
-**Cuisine (종류)**: 한식 · 중식 · 일식 · 양식 · 카페-디저트 · 기타
+**Category (종류)**: 구내식당/한식뷔페 · 국밥/탕/찌개 · 제육/백반/정식 · 중식 · 면류/분식 · 돈까스/일식/양식 · 아시안/세계요리 · 간편식/식단관리 — grouped by lunch-decision style (soup vs. set-meal vs. quick bite) rather than plain country-of-origin, since that's what actually matters when picking a lunch spot near Gasan
 
 All filters are optional (multi-select). Leave empty to see all restaurants.
 

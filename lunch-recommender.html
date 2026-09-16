@@ -435,40 +435,63 @@
   var RADIUS_OPTIONS = [100, 200, 300, 400, 500];
   var TYPE_OPTIONS = ['면','밥','국물','구이','튀김','분식','기타'];
   var TASTE_OPTIONS = ['매운맛','순한맛','보통'];
-  var CUISINE_OPTIONS = ['한식','중식','일식','양식','카페-디저트','기타'];
+  // 종류(cuisine) 8분류 — "한식/중식/일식/양식"처럼 국가 기준으로 나누면 정작 점심 고를 때
+  // 궁금한 "이게 국밥집인지 백반집인지 구내식당인지"가 안 드러나서, 실제 점심 메뉴 스타일
+  // 기준으로 재편했다(사용자 정의, 2026-09-16). 순서는 화면에 보이는 칩 순서이기도 하다.
+  var CUISINE_OPTIONS = [
+    '구내식당/한식뷔페', '국밥/탕/찌개', '제육/백반/정식', '중식',
+    '면류/분식', '돈까스/일식/양식', '아시안/세계요리', '간편식/식단관리'
+  ];
 
-  // 카테고리명/상호명 키워드 → 태그·추천메뉴 자동 추정 규칙 (선매칭 우선)
+  // 카테고리명/상호명 키워드 → 태그·추천메뉴 자동 추정 규칙 (선매칭 우선 — 배열에서 먼저 나온
+  // 규칙이 이긴다. 예: "카레돈까스"는 "커리"보다 앞에 있는 "돈까스" 규칙에 먼저 걸려야 한다)
   var TAG_RULES = [
-    { kw:['돈까스','돈가스'], type:['튀김','밥'], taste:'순한맛', cuisine:'일식', menu:'돈까스' },
-    { kw:['라멘'], type:['면','국물'], taste:'보통', cuisine:'일식', menu:'라멘' },
-    { kw:['초밥','스시'], type:['밥'], taste:'순한맛', cuisine:'일식', menu:'초밥' },
-    { kw:['칼국수'], type:['면','국물'], taste:'순한맛', cuisine:'한식', menu:'칼국수' },
-    { kw:['냉면'], type:['면'], taste:'보통', cuisine:'한식', menu:'물냉면' },
+    { kw:['돈까스','돈가스'], type:['튀김','밥'], taste:'순한맛', cuisine:'돈까스/일식/양식', menu:'돈까스' },
+    { kw:['라멘'], type:['면','국물'], taste:'보통', cuisine:'돈까스/일식/양식', menu:'라멘' },
+    { kw:['초밥','스시'], type:['밥'], taste:'순한맛', cuisine:'돈까스/일식/양식', menu:'초밥' },
+    { kw:['칼국수'], type:['면','국물'], taste:'순한맛', cuisine:'면류/분식', menu:'칼국수' },
+    { kw:['수제비'], type:['면','국물'], taste:'순한맛', cuisine:'면류/분식', menu:'수제비' },
+    { kw:['냉면'], type:['면'], taste:'보통', cuisine:'면류/분식', menu:'물냉면' },
+    { kw:['라면'], type:['면','국물'], taste:'보통', cuisine:'면류/분식', menu:'라면' },
     { kw:['짬뽕'], type:['면','국물'], taste:'매운맛', cuisine:'중식', menu:'짬뽕' },
     { kw:['짜장','중화요리','중국요리','중국집'], type:['면'], taste:'순한맛', cuisine:'중식', menu:'짜장면' },
-    { kw:['떡볶이','분식'], type:['분식'], taste:'매운맛', cuisine:'한식', menu:'떡볶이' },
-    { kw:['국밥'], type:['국물','밥'], taste:'보통', cuisine:'한식', menu:'순대국밥' },
-    { kw:['찌개','백반'], type:['국물','밥'], taste:'보통', cuisine:'한식', menu:'김치찌개' },
-    { kw:['삼겹살','고기','구이'], type:['구이'], taste:'보통', cuisine:'한식', menu:'삼겹살' },
-    { kw:['치킨'], type:['튀김'], taste:'보통', cuisine:'한식', menu:'후라이드치킨' },
-    { kw:['피자'], type:['기타'], taste:'보통', cuisine:'양식', menu:'피자' },
-    { kw:['파스타','양식'], type:['면'], taste:'순한맛', cuisine:'양식', menu:'파스타' },
-    { kw:['카페','커피','디저트'], type:['기타'], taste:'보통', cuisine:'카페-디저트', menu:'아메리카노' },
-    { kw:['샐러드'], type:['기타'], taste:'순한맛', cuisine:'양식', menu:'샐러드' },
-    { kw:['쌀국수','베트남'], type:['면','국물'], taste:'매운맛', cuisine:'기타', menu:'쌀국수' },
-    { kw:['마라'], type:['국물','면'], taste:'매운맛', cuisine:'중식', menu:'마라탕' },
+    { kw:['떡볶이','분식'], type:['분식'], taste:'매운맛', cuisine:'면류/분식', menu:'떡볶이' },
+    { kw:['국밥'], type:['국물','밥'], taste:'보통', cuisine:'국밥/탕/찌개', menu:'순대국밥' },
+    { kw:['해장국'], type:['국물','밥'], taste:'보통', cuisine:'국밥/탕/찌개', menu:'해장국' },
+    { kw:['찌개'], type:['국물','밥'], taste:'보통', cuisine:'국밥/탕/찌개', menu:'김치찌개' },
+    { kw:['백반','정식'], type:['밥'], taste:'보통', cuisine:'제육/백반/정식', menu:'오늘의 백반' },
+    { kw:['제육'], type:['구이','밥'], taste:'매운맛', cuisine:'제육/백반/정식', menu:'제육볶음' },
+    { kw:['불백','쌈밥'], type:['구이','밥'], taste:'보통', cuisine:'제육/백반/정식', menu:'불고기쌈밥' },
+    { kw:['생선구이'], type:['구이','밥'], taste:'순한맛', cuisine:'제육/백반/정식', menu:'생선구이' },
+    { kw:['삼겹살','고기','구이'], type:['구이'], taste:'보통', cuisine:'제육/백반/정식', menu:'삼겹살' },
+    { kw:['치킨'], type:['튀김'], taste:'보통', cuisine:'제육/백반/정식', menu:'후라이드치킨' },
+    { kw:['피자'], type:['기타'], taste:'보통', cuisine:'돈까스/일식/양식', menu:'피자' },
+    { kw:['파스타','양식'], type:['면'], taste:'순한맛', cuisine:'돈까스/일식/양식', menu:'파스타' },
+    { kw:['카페','커피','디저트','브런치'], type:['기타'], taste:'보통', cuisine:'간편식/식단관리', menu:'아메리카노' },
+    { kw:['샐러드'], type:['기타'], taste:'순한맛', cuisine:'간편식/식단관리', menu:'샐러드' },
+    { kw:['포케'], type:['밥','기타'], taste:'순한맛', cuisine:'간편식/식단관리', menu:'포케' },
+    { kw:['샌드위치','토스트'], type:['기타'], taste:'순한맛', cuisine:'간편식/식단관리', menu:'샌드위치' },
+    { kw:['버거','햄버거'], type:['기타'], taste:'보통', cuisine:'간편식/식단관리', menu:'수제버거' },
+    { kw:['쌀국수','베트남'], type:['면','국물'], taste:'매운맛', cuisine:'아시안/세계요리', menu:'쌀국수' },
+    { kw:['팟타이','태국'], type:['면'], taste:'매운맛', cuisine:'아시안/세계요리', menu:'팟타이' },
+    { kw:['나시고랭'], type:['밥'], taste:'매운맛', cuisine:'아시안/세계요리', menu:'나시고랭' },
+    { kw:['인도커리','커리'], type:['국물','밥'], taste:'매운맛', cuisine:'아시안/세계요리', menu:'인도커리' },
+    { kw:['타코'], type:['기타'], taste:'매운맛', cuisine:'아시안/세계요리', menu:'타코' },
+    { kw:['마라'], type:['국물','면'], taste:'매운맛', cuisine:'아시안/세계요리', menu:'마라탕' },
     // 곱창/막창은 소금구이(안 매움)로 먹는 게 기본형이라, 매운맛 표기가 붙은 경우만 매운맛으로
     // 잡는다. 이 규칙을 일반 규칙("곱창","막창")보다 먼저 둬야 한다(선매칭 우선 — 예: "양념막창"은
     // "막창"에도 걸리지만 "양념막창" 키워드가 더 먼저 나와야 매운맛으로 잡힌다).
-    { kw:['양념곱창','양념막창','불막창','불곱창','매운곱창','매운막창'], type:['구이'], taste:'매운맛', cuisine:'한식', menu:'양념막창' },
-    { kw:['곱창','막창','대창'], type:['구이'], taste:'보통', cuisine:'한식', menu:'곱창구이' },
-    { kw:['김밥'], type:['분식'], taste:'순한맛', cuisine:'한식', menu:'김밥' }
+    { kw:['양념곱창','양념막창','불막창','불곱창','매운곱창','매운막창'], type:['구이'], taste:'매운맛', cuisine:'제육/백반/정식', menu:'양념막창' },
+    { kw:['곱창','막창','대창'], type:['구이'], taste:'보통', cuisine:'제육/백반/정식', menu:'곱창구이' },
+    { kw:['구내식당'], type:['밥','국물'], taste:'보통', cuisine:'구내식당/한식뷔페', menu:'오늘의 메뉴' },
+    { kw:['뷔페'], type:['밥','기타'], taste:'보통', cuisine:'구내식당/한식뷔페', menu:'한식뷔페' },
+    { kw:['김밥'], type:['분식'], taste:'순한맛', cuisine:'면류/분식', menu:'김밥' }
   ];
 
   // 카카오 연동 실패 시 보여줄 예시 데이터입니다. 실제 상호가 아니며, 재검색이 성공하면 실제 데이터로 대체됩니다.
   // 메뉴 기준 추천(한 식당 안에 여러 형태의 메뉴가 섞여 있을 수 있음)을 보여주는 예시로 구성했다.
   var SEED_RESTAURANTS = [
-    { id:'seed:1', name:'가산 순두부찌개(예시)', categoryName:'음식점 > 한식 > 찌개,전골', distanceM:220, cuisine:'한식',
+    { id:'seed:1', name:'가산 순두부찌개(예시)', categoryName:'음식점 > 한식 > 찌개,전골', distanceM:220, cuisine:'국밥/탕/찌개',
       menuItems:[
         { name:'순두부찌개', price:8000, isRecommend:true, type:['국물','밥'], taste:'매운맛' },
         { name:'된장찌개', price:8000, isRecommend:false, type:['국물','밥'], taste:'보통' },
@@ -480,35 +503,35 @@
         { name:'짜장면', price:7000, isRecommend:false, type:['면'], taste:'순한맛' },
         { name:'탕수육', price:18000, isRecommend:false, type:['튀김'], taste:'순한맛' }
       ] },
-    { id:'seed:3', name:'가산 돈까스(예시)', categoryName:'음식점 > 일식 > 돈까스,우동', distanceM:150, cuisine:'일식',
+    { id:'seed:3', name:'가산 돈까스(예시)', categoryName:'음식점 > 일식 > 돈까스,우동', distanceM:150, cuisine:'돈까스/일식/양식',
       menuItems:[
         { name:'등심돈까스', price:11000, isRecommend:true, type:['튀김','밥'], taste:'순한맛' },
         { name:'카레돈까스', price:12000, isRecommend:false, type:['튀김','밥'], taste:'순한맛' },
         { name:'우동', price:8000, isRecommend:false, type:['면','국물'], taste:'순한맛' }
       ] },
-    { id:'seed:4', name:'산디 김밥천국(예시)', categoryName:'음식점 > 한식 > 분식', distanceM:40, cuisine:'한식',
+    { id:'seed:4', name:'산디 김밥천국(예시)', categoryName:'음식점 > 한식 > 분식', distanceM:40, cuisine:'면류/분식',
       menuItems:[
         { name:'참치김밥', price:4000, isRecommend:true, type:['분식'], taste:'순한맛' },
         { name:'떡볶이', price:4000, isRecommend:false, type:['분식'], taste:'매운맛' },
         { name:'순대', price:5000, isRecommend:false, type:['분식'], taste:'보통' }
       ] },
-    { id:'seed:5', name:'라멘야(예시)', categoryName:'음식점 > 일식 > 면요리', distanceM:200, cuisine:'일식',
+    { id:'seed:5', name:'라멘야(예시)', categoryName:'음식점 > 일식 > 면요리', distanceM:200, cuisine:'돈까스/일식/양식',
       menuItems:[
         { name:'돈코츠라멘', price:10000, isRecommend:true, type:['면','국물'], taste:'보통' },
         { name:'교자', price:6000, isRecommend:false, type:['튀김'], taste:'보통' }
       ] },
-    { id:'seed:6', name:'가산 삼겹살집(예시)', categoryName:'음식점 > 한식 > 육류,고기', distanceM:240, cuisine:'한식',
+    { id:'seed:6', name:'가산 삼겹살집(예시)', categoryName:'음식점 > 한식 > 육류,고기', distanceM:240, cuisine:'제육/백반/정식',
       menuItems:[
         { name:'제육쌈밥(런치)', price:9000, isRecommend:true, type:['구이','밥'], taste:'보통' },
         { name:'된장찌개', price:5000, isRecommend:false, type:['국물','밥'], taste:'보통' }
       ] },
-    { id:'seed:7', name:'카페 브런치(예시)', categoryName:'카페 > 브런치카페', distanceM:60, cuisine:'카페-디저트',
+    { id:'seed:7', name:'카페 브런치(예시)', categoryName:'카페 > 브런치카페', distanceM:60, cuisine:'간편식/식단관리',
       menuItems:[
         { name:'크로플세트', price:9500, isRecommend:true, type:['기타'], taste:'순한맛' },
         { name:'샌드위치', price:8500, isRecommend:false, type:['기타'], taste:'순한맛' },
         { name:'아메리카노', price:4500, isRecommend:false, type:['기타'], taste:'보통' }
       ] },
-    { id:'seed:8', name:'옛날 손칼국수(예시)', categoryName:'음식점 > 한식 > 칼국수', distanceM:180, cuisine:'한식',
+    { id:'seed:8', name:'옛날 손칼국수(예시)', categoryName:'음식점 > 한식 > 칼국수', distanceM:180, cuisine:'면류/분식',
       menuItems:[
         { name:'바지락칼국수', price:9000, isRecommend:true, type:['면','국물'], taste:'순한맛' },
         { name:'수제비', price:9000, isRecommend:false, type:['면','국물'], taste:'순한맛' },
@@ -574,12 +597,36 @@
   // 제각각이라 놓치는 경우가 있으므로(예: "중화요리"는 찾지만 "중국요리"는 못 찾는 식), 카카오가
   // 이미 분류해준 이 값을 최우선으로 신뢰하고 cuisine을 덮어쓴다. type/taste/signatureMenu는
   // 카테고리만으로는 알 수 없어 계속 키워드 추정에 의존한다.
+  //
+  // 8분류(CUISINE_OPTIONS)로 재편하면서 "한식" 대분류 하나가 국밥/탕/찌개·제육/백반/정식·
+  // 면류/분식·구내식당/한식뷔페 등 여러 버킷에 걸쳐 있게 됐다. 그래서 배열 순서가 그대로
+  // 우선순위다 — "찌개","분식","고기"처럼 구체적인 소분류 키워드를 먼저 확인하고, 뭘로도 못
+  // 정하겠으면 맨 마지막의 '한식' 단독 매칭이 (제육/백반/정식으로) 잡아준다.
   var CUISINE_CATEGORY_KEYWORDS = [
-    ['한식','한식'], ['중식','중식'], ['일식','일식'], ['양식','양식'],
-    ['카페','카페-디저트'], ['디저트','카페-디저트'], ['베이커리','카페-디저트']
+    ['구내식당','구내식당/한식뷔페'], ['뷔페','구내식당/한식뷔페'],
+    ['중식','중식'], ['중국요리','중식'],
+    ['국밥','국밥/탕/찌개'], ['해장국','국밥/탕/찌개'], ['찌개','국밥/탕/찌개'], ['전골','국밥/탕/찌개'],
+    ['국수','면류/분식'], ['칼국수','면류/분식'], ['냉면','면류/분식'], ['분식','면류/분식'],
+    ['김밥','면류/분식'], ['떡볶이','면류/분식'],
+    ['돈까스','돈까스/일식/양식'], ['초밥','돈까스/일식/양식'], ['일식','돈까스/일식/양식'],
+    ['양식','돈까스/일식/양식'], ['피자','돈까스/일식/양식'], ['파스타','돈까스/일식/양식'], ['스테이크','돈까스/일식/양식'],
+    ['아시아음식','아시안/세계요리'], ['동남아음식','아시안/세계요리'], ['베트남','아시안/세계요리'], ['샤브샤브','아시안/세계요리'],
+    ['카페','간편식/식단관리'], ['디저트','간편식/식단관리'], ['베이커리','간편식/식단관리'],
+    ['패스트푸드','간편식/식단관리'], ['샌드위치','간편식/식단관리'],
+    ['백반','제육/백반/정식'], ['정식','제육/백반/정식'], ['제육','제육/백반/정식'],
+    ['육류','제육/백반/정식'], ['고기','제육/백반/정식'], ['해물','제육/백반/정식'],
+    ['생선','제육/백반/정식'], ['갈비','제육/백반/정식'],
+    ['한식','제육/백반/정식'] // 더 구체적인 소분류가 위에서 먼저 안 걸렸을 때의 한식 대분류 폴백
   ];
+  // 카카오 category_name은 보통 "대분류 > 중분류 > 소분류" 3단인데, 일부 프랜차이즈는 그
+  // 뒤에 브랜드명을 4번째 단으로 그대로 덧붙여준다(예: "음식점 > 한식 > 찌개,전골 > 박가부대").
+  // 브랜드명엔 실제 업종과 무관한 텍스트가 들어있을 수 있으니 매칭 대상에서 제외하고, 앞의
+  // 3단(진짜 분류 정보)까지만 잘라서 키워드를 찾는다.
+  function categoryClassificationPath(categoryName){
+    return (categoryName || '').split(' > ').slice(0, 3).join(' > ');
+  }
   function inferCuisineFromCategory(categoryName){
-    var cat = categoryName || '';
+    var cat = categoryClassificationPath(categoryName);
     for(var i=0;i<CUISINE_CATEGORY_KEYWORDS.length;i++){
       if(cat.indexOf(CUISINE_CATEGORY_KEYWORDS[i][0]) !== -1) return CUISINE_CATEGORY_KEYWORDS[i][1];
     }
@@ -622,7 +669,7 @@
         if(hay.indexOf(rule.kw[j]) !== -1) return rule.cuisine;
       }
     }
-    return '한식';
+    return '제육/백반/정식'; // 아무 규칙에도 안 걸린 일반 한식당류의 최종 폴백
   }
 
   // ============ overrides (localStorage 사용자 편집분) ============
@@ -638,7 +685,11 @@
     var saved = overrides[raw.id] || {};
     var includedByGeometry = raw.includedByGeometry !== undefined ? raw.includedByGeometry : true;
     var manualOverride = ('manualOverride' in saved) ? saved.manualOverride : null;
-    var cuisine = saved.cuisine !== undefined ? saved.cuisine : (raw.cuisine || inferCuisine(raw.categoryName, raw.name));
+    // 종류 8분류 개편(2026-09-16) 이전에 저장된 편집분은 옛 taxonomy 값('한식' 등)을 그대로
+    // 갖고 있을 수 있다. CUISINE_OPTIONS에 없는 값이면 무시하고 다시 추정한다 — 그대로 두면
+    // 그 식당이 "종류" 필터의 어떤 칩을 골라도 안 걸리는(=계속 안 보이는) 조용한 문제가 생긴다.
+    var savedCuisineValid = saved.cuisine !== undefined && CUISINE_OPTIONS.indexOf(saved.cuisine) !== -1;
+    var cuisine = savedCuisineValid ? saved.cuisine : (raw.cuisine || inferCuisine(raw.categoryName, raw.name));
 
     // 메뉴 목록: 사용자가 직접 편집해뒀으면 그게 최우선, 없으면 자동조회(카카오/네이버) 결과,
     // 그것도 없으면(아직 조회 전이거나 실패) 상호명 키워드로 대표메뉴 1개만 추정해서 최소한
