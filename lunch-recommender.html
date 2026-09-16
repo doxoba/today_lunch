@@ -327,7 +327,7 @@
   <header class="page-header">
     <div>
       <h1 class="page-title">오늘 뭐 먹지 고민 끝</h1>
-      <p class="page-sub">가산디지털1로 136 기준 반경 250m · 1호선 철길 서쪽만 추천해요</p>
+      <p class="page-sub" id="pageSub">가산디지털1로 136 기준 반경 300m · 1호선 철길 서쪽만 추천해요</p>
     </div>
     <div class="rail-pill"><i class="ph ph-train" aria-hidden="true"></i>1호선 서쪽 구역</div>
   </header>
@@ -336,6 +336,10 @@
 
     <div class="panel panel-filters">
       <div class="section-label">조건</div>
+      <div class="filter-group">
+        <div class="group-label">반경 (바꾸면 다시 검색해요)</div>
+        <div class="chips" id="chips-radius"></div>
+      </div>
       <div class="filter-group">
         <div class="group-label">형태</div>
         <div class="chips" id="chips-type"></div>
@@ -381,6 +385,9 @@
 
   <details class="accordion">
     <summary>주변 식당 목록 · 정보 편집<i class="ph ph-caret-down" aria-hidden="true"></i></summary>
+    <div class="banner" id="searchIncompleteWarning" hidden style="margin:12px 16px 0;">
+      ⚠️ 이 반경은 상점이 워낙 밀집해 있어(카카오 API 45건 제한) 일부가 누락됐을 수 있어요. 반경을 줄이거나, 아래에서 직접 확인해 빠진 식당은 없는지 대조해보세요.
+    </div>
     <div class="list-body" id="listBody"></div>
     <div class="accordion-foot">
       <button id="researchBtn" type="button">재검색</button>
@@ -401,7 +408,12 @@
   var CONFIG = {
     KAKAO_JS_KEY: '9394ac1268768ad4accfdf8623a92f16',
     OFFICE_ADDRESS: '서울 금천구 가산디지털1로 136',
-    RADIUS_M: 250,
+    DEFAULT_RADIUS_M: 300,
+    // 가산디지털단지는 카카오 Local API 문서 캡(검색 1회당 최대 45건)에 실제로 걸릴 만큼
+    // 밀집한 지역이라(실측: 400m 반경만 돼도 캡 걸린 고정 그리드 방식은 44%가 누락됨), 반경
+    // 재귀 분할 탐색(deepCategorySearch)의 최대 분할 깊이/최소 반경을 여기서 조절한다.
+    SEARCH_MAX_DEPTH: 6,
+    SEARCH_MIN_SUBRADIUS_M: 40,
     RAIL_STATION_A_QUERY: '가산디지털단지역',
     RAIL_STATION_B_QUERY: '독산역',
     STORAGE_PREFIX: 'lunch-recommender:v1:',
@@ -420,6 +432,7 @@
     TEAM_POLL_MS: 4000
   };
 
+  var RADIUS_OPTIONS = [100, 200, 300, 400, 500];
   var TYPE_OPTIONS = ['면','밥','국물','구이','튀김','분식','기타'];
   var TASTE_OPTIONS = ['매운맛','순한맛','보통'];
   var CUISINE_OPTIONS = ['한식','중식','일식','양식','카페-디저트','기타'];
@@ -508,6 +521,9 @@
     currentResultId: null,
     officeSign: null,
     railAvailable: false,
+    radiusM: RADIUS_OPTIONS.indexOf(storageGet('radiusM', CONFIG.DEFAULT_RADIUS_M)) !== -1
+      ? storageGet('radiusM', CONFIG.DEFAULT_RADIUS_M) : CONFIG.DEFAULT_RADIUS_M,
+    searchIncomplete: false,
     map: null,
     highlightMarker: null,
     highlightInfoWindow: null
@@ -733,15 +749,18 @@
     });
   }
 
-  function categorySearchAll(places, center, radius){
+  // 한 원(center, radius) 안의 FD6(음식점) 결과를 페이지네이션 끝까지 모은다. 결과가 없는
+  // 경우(ZERO_RESULT)는 재귀 분할 탐색에서 흔히 나오는 정상 상황이라 에러로 취급하지 않는다.
+  function categorySearchOnce(places, center, radius){
     return new Promise(function(resolve, reject){
       var all = [];
       places.categorySearch('FD6', function(data, status, pagination){
+        if(status === kakao.maps.services.Status.ZERO_RESULT){ resolve({ docs:[], capped:false }); return; }
         if(status !== kakao.maps.services.Status.OK){ reject(new Error('category search failed: '+status)); return; }
         all = all.concat(data);
         if(pagination.hasNextPage){ pagination.nextPage(); }
-        else { resolve(all); }
-      }, { location: new kakao.maps.LatLng(center.lat, center.lng), radius: radius, sort: kakao.maps.services.SortBy.DISTANCE });
+        else { resolve({ docs: all, capped: all.length === 45 }); }
+      }, { location: new kakao.maps.LatLng(center.lat, center.lng), radius: Math.round(radius), sort: kakao.maps.services.SortBy.DISTANCE });
     });
   }
 
@@ -752,35 +771,48 @@
     return { lat: center.lat + dLat, lng: center.lng + dLng };
   }
 
-  // 카카오 Local API(categorySearch/keywordSearch)는 공식 문서상 "노출 가능 문서 수 최대: 45"로
-  // 하드 캡이 걸려 있다(페이지·사이즈를 아무리 조절해도 한 번의 검색으로는 45건을 못 넘김).
-  // 가산디지털단지처럼 반경 250m 안에 45곳이 넘는 밀집 상권에서는 중심 1곳만 검색하면 잘려나가는
-  // 식당이 생긴다. 그래서 원래 중심을 살짝 오프셋한 지점(중심+동서남북 4곳, 총 5곳)에서 서로 겹치는
-  // 더 작은 원으로 나눠 검색한 뒤 place id 기준으로 병합/중복제거해서 사실상의 45건 캡을 우회한다.
-  // (오프셋 0.6R + 서브반경 0.85R 조합은 원래 반경 R의 원 전체를 빈틈없이 커버하도록 계산된 값)
-  function buildSearchGrid(center, radius){
-    var offsetM = radius * 0.6;
-    var subRadius = Math.min(20000, Math.round(radius * 0.85));
-    return [
-      { lat:center.lat, lng:center.lng },
-      offsetLatLng(center, offsetM, 0),
-      offsetLatLng(center, -offsetM, 0),
-      offsetLatLng(center, 0, offsetM),
-      offsetLatLng(center, 0, -offsetM)
-    ].map(function(c){ return { center:c, radius:subRadius }; });
+  // 카카오 Local API(categorySearch)는 공식 문서상 "노출 가능 문서 수 최대: 45"로 하드 캡이
+  // 걸려 있다(페이지를 아무리 넘겨도 한 번의 검색으로는 45건을 못 넘김). 이전엔 중심+동서남북
+  // 5곳을 고정 오프셋/반경으로 한 번만 나눠 검색하는 방식(고정 그리드)을 썼는데, 가산디지털단지
+  // 실측 결과 반경 400m에서 44%, 500m에서 59%가 누락되는 걸 REST API로 직접 대조해 확인했다
+  // (밀집도가 워낙 높아 5개 셀 각각도 45건 캡에 다시 걸림). 그래서 "한 원이 45건 캡에 걸리면
+  // 그 원을 4등분해서 다시 검색"을 캡에 안 걸릴 때까지(또는 깊이/최소반경 한도까지) 재귀적으로
+  // 반복하는 적응형 탐색으로 바꿨다 — 밀집도에 따라 필요한 만큼만 알아서 더 잘게 쪼갠다.
+  // depth/minRadius 한도에 도달했는데도 여전히 캡에 걸려있다면(=더 쪼개야 하는데 못 쪼갬)
+  // incomplete:true를 반환해 UI에서 "누락 가능성" 경고를 띄울 수 있게 한다.
+  function deepCategorySearch(places, center, radius, depth, maxDepth, minRadiusM){
+    return categorySearchOnce(places, center, radius).then(function(res){
+      var byId = {};
+      res.docs.forEach(function(p){ byId[p.id] = p; });
+      if(res.capped && depth < maxDepth && radius > minRadiusM){
+        var subOffset = radius * 0.55;
+        var subRadius = radius * 0.6;
+        var points = [
+          offsetLatLng(center, subOffset, 0),
+          offsetLatLng(center, -subOffset, 0),
+          offsetLatLng(center, 0, subOffset),
+          offsetLatLng(center, 0, -subOffset)
+        ];
+        return Promise.all(points.map(function(p){
+          return deepCategorySearch(places, p, subRadius, depth+1, maxDepth, minRadiusM);
+        })).then(function(subResults){
+          var anyIncomplete = false;
+          subResults.forEach(function(sub){
+            anyIncomplete = anyIncomplete || sub.incomplete;
+            Object.keys(sub.byId).forEach(function(id){ byId[id] = sub.byId[id]; });
+          });
+          return { byId: byId, incomplete: anyIncomplete };
+        });
+      }
+      return { byId: byId, incomplete: res.capped }; // 캡에 걸렸는데 더 못 쪼갠 경우만 incomplete
+    });
   }
 
   function fetchAllNearby(places, officeCoord, radius){
-    var grid = buildSearchGrid(officeCoord, radius);
-    return Promise.all(grid.map(function(g){
-      return categorySearchAll(places, g.center, g.radius);
-    })).then(function(resultsPerCell){
-      var byId = {};
-      resultsPerCell.forEach(function(list){
-        list.forEach(function(p){ byId[p.id] = p; });
+    return deepCategorySearch(places, officeCoord, radius, 0, CONFIG.SEARCH_MAX_DEPTH, CONFIG.SEARCH_MIN_SUBRADIUS_M)
+      .then(function(res){
+        return { list: Object.keys(res.byId).map(function(id){ return res.byId[id]; }), incomplete: res.incomplete };
       });
-      return Object.keys(byId).map(function(id){ return byId[id]; });
-    });
   }
 
   function fetchLiveRestaurants(){
@@ -802,15 +834,17 @@
       } else {
         state.railAvailable = false;
       }
-      return fetchAllNearby(places, officeCoord, CONFIG.RADIUS_M);
-    }).then(function(raw){
-      return raw.map(function(p){
+      return fetchAllNearby(places, officeCoord, state.radiusM);
+    }).then(function(res){
+      state.searchIncomplete = res.incomplete;
+      return res.list.map(function(p){
         var lat = +p.y, lng = +p.x;
-        // 여러 지점(그리드)에서 병합한 결과라 카카오가 주는 p.distance는 검색 중심마다 기준점이 달라
-        // 신뢰할 수 없다. 항상 실제 사무실 좌표 기준 haversine 거리로 다시 계산한다.
+        // 재귀 분할 탐색으로 여러 지점에서 병합한 결과라 카카오가 주는 p.distance는 검색
+        // 중심마다 기준점이 달라 신뢰할 수 없다. 항상 실제 사무실 좌표 기준 haversine
+        // 거리로 다시 계산한다.
         var distanceM = Math.round(haversine(officeCoord, {lat:lat,lng:lng}));
         var side = state.railAvailable ? crossSign(stationA, stationB, {lat:lat,lng:lng}) : null;
-        var includedByGeometry = distanceM <= CONFIG.RADIUS_M && (!state.railAvailable || side === state.officeSign);
+        var includedByGeometry = distanceM <= state.radiusM && (!state.railAvailable || side === state.officeSign);
         return {
           id: 'kakao:' + p.id, source:'kakao', name: p.place_name, categoryName: p.category_name,
           phone: p.phone, address: p.road_address_name || p.address_name, lat: lat, lng: lng,
@@ -927,7 +961,7 @@
     state.highlightInfoWindow = null;
     new kakao.maps.Marker({ position:center, map:map });
     new kakao.maps.Circle({
-      center:center, radius:CONFIG.RADIUS_M, strokeWeight:2, strokeColor:'#ff6b35', strokeOpacity:.8,
+      center:center, radius:state.radiusM, strokeWeight:2, strokeColor:'#ff6b35', strokeOpacity:.8,
       fillColor:'#ff6b35', fillOpacity:.12, map:map
     });
     state.restaurants.forEach(function(r){
@@ -1007,7 +1041,30 @@
   }
 
   // ============ 렌더링 ============
+  function updatePageSub(){
+    $('pageSub').textContent = '가산디지털1로 136 기준 반경 ' + state.radiusM + 'm · 1호선 철길 서쪽만 추천해요';
+  }
+  // 반경은 나머지 조건(형태/맛/종류)과 달리 결과를 필터링하는 게 아니라 카카오 재검색 범위
+  // 자체를 바꾸므로, 멀티셀렉트 칩이 아니라 단일 선택이며 클릭 즉시 재검색(init)까지 트리거한다.
+  function renderRadiusChips(){
+    var c = $('chips-radius');
+    c.innerHTML = '';
+    RADIUS_OPTIONS.forEach(function(opt){
+      var chip = el('button', 'chip' + (state.radiusM === opt ? ' active' : ''), opt + 'm');
+      chip.type = 'button';
+      chip.addEventListener('click', function(){
+        if(state.radiusM === opt) return;
+        state.radiusM = opt;
+        storageSet('radiusM', opt);
+        updatePageSub();
+        renderRadiusChips();
+        init();
+      });
+      c.appendChild(chip);
+    });
+  }
   function renderChips(){
+    renderRadiusChips();
     renderChipGroup('chips-type', TYPE_OPTIONS, 'type');
     renderChipGroup('chips-taste', TASTE_OPTIONS, 'taste');
     renderChipGroup('chips-cuisine', CUISINE_OPTIONS, 'cuisine');
@@ -1091,7 +1148,7 @@
     // 숨긴다. 다만 자동 판정이 경계에서 틀렸을 때 수동으로 "포함"시켜 보정할 수 있어야 하므로
     // 완전히 없애지는 않고, 펼쳐볼 수 있는 접힘 영역으로만 남겨둔다.
     if(included.length === 0){
-      body.appendChild(el('div','empty-state','반경 250m·1호선 서쪽 조건에 맞는 식당이 없어요.'));
+      body.appendChild(el('div','empty-state','반경 '+state.radiusM+'m·1호선 서쪽 조건에 맞는 식당이 없어요.'));
     } else {
       included.forEach(function(r){ body.appendChild(buildRow(r)); });
     }
@@ -1318,6 +1375,7 @@
   }
 
   function renderAll(officeCoord){
+    updatePageSub();
     renderChips();
     updateCtaState();
     renderList();
@@ -1327,8 +1385,14 @@
     } else {
       $('mapCard').hidden = true;
     }
-    $('lastSearchAt').textContent = '마지막 검색: ' + new Date().toLocaleString('ko-KR');
+    // 검증(2번 항목) 목적의 진단 정보: 반경 내에서 몇 곳을 찾았는지 눈으로 바로 대조해볼 수 있게
+    // 개수를 노출하고, 재귀 분할 탐색이 45건 캡에 걸린 채 더 못 쪼갠 경우(극히 밀집한 지역에서
+    // 반경을 크게 잡았을 때) 누락 가능성을 경고한다.
+    var countText = state.mode === 'live' ? (' · 반경 내 ' + state.restaurants.length + '곳 조회됨') : '';
+    $('lastSearchAt').textContent = '마지막 검색: ' + new Date().toLocaleString('ko-KR') + countText;
     storageSet('lastSearchAt', new Date().toISOString());
+    var warnEl = $('searchIncompleteWarning');
+    if(warnEl) warnEl.hidden = !(state.mode === 'live' && state.searchIncomplete);
     // 처음 열었을 때도 바로 추천 결과가 보이도록 자동으로 한 번 뽑아둔다.
     if(candidatePairs().length > 0){ onRecommend(); } else { renderResult(null); }
   }
@@ -1684,6 +1748,7 @@
       .catch(function(err){
         console.warn('[lunch-recommender] 카카오 라이브 검색 실패, 예시 데이터로 대체합니다:', err && err.message);
         state.mode = 'seed';
+        state.searchIncomplete = false;
         showFallbackBanner();
         setRestaurants(getSeedRestaurants());
         renderAll(null);
