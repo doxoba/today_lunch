@@ -327,7 +327,7 @@
     { kw:['칼국수'], type:['면','국물'], taste:'순한맛', cuisine:'한식', menu:'칼국수' },
     { kw:['냉면'], type:['면'], taste:'보통', cuisine:'한식', menu:'물냉면' },
     { kw:['짬뽕'], type:['면','국물'], taste:'매운맛', cuisine:'중식', menu:'짬뽕' },
-    { kw:['짜장','중화요리','중국집'], type:['면'], taste:'순한맛', cuisine:'중식', menu:'짜장면' },
+    { kw:['짜장','중화요리','중국요리','중국집'], type:['면'], taste:'순한맛', cuisine:'중식', menu:'짜장면' },
     { kw:['떡볶이','분식'], type:['분식'], taste:'매운맛', cuisine:'한식', menu:'떡볶이' },
     { kw:['국밥'], type:['국물','밥'], taste:'보통', cuisine:'한식', menu:'순대국밥' },
     { kw:['찌개','백반'], type:['국물','밥'], taste:'보통', cuisine:'한식', menu:'김치찌개' },
@@ -411,17 +411,35 @@
     if(cross < 0) return -1;
     return 0;
   }
+  // 카카오 category_name은 "음식점 > 중식 > 중국요리"처럼 "대분류 > 중분류 > 소분류" 구조라,
+  // 중분류가 사실상 정확한 업종 정보다. TAG_RULES 키워드 매칭은 상호명 표기가 제각각이라
+  // 놓치는 경우가 있으므로(예: "중화요리"는 찾지만 "중국요리"는 못 찾는 식), 카카오가 이미 알려준
+  // 이 값을 최우선으로 신뢰하고 cuisine을 덮어쓴다. type/taste/signatureMenu는 카테고리만으로는
+  // 알 수 없어 계속 키워드 추정에 의존한다.
+  var CATEGORY_CUISINE_MAP = {
+    '한식':'한식', '중식':'중식', '일식':'일식', '양식':'양식',
+    '카페':'카페-디저트', '디저트':'카페-디저트', '제과,베이커리':'카페-디저트'
+  };
+  function categoryMidTier(categoryName){
+    var parts = (categoryName||'').split('>').map(function(s){ return s.trim(); });
+    return parts.length >= 2 ? parts[1] : '';
+  }
   function autoFill(categoryName, name){
     var hay = (categoryName||'') + ' ' + (name||'');
-    for(var i=0;i<TAG_RULES.length;i++){
+    var result = null;
+    for(var i=0;i<TAG_RULES.length && !result;i++){
       var rule = TAG_RULES[i];
       for(var j=0;j<rule.kw.length;j++){
         if(hay.indexOf(rule.kw[j]) !== -1){
-          return { type: rule.type.slice(), taste: rule.taste, cuisine: rule.cuisine, signatureMenu: rule.menu };
+          result = { type: rule.type.slice(), taste: rule.taste, cuisine: rule.cuisine, signatureMenu: rule.menu };
+          break;
         }
       }
     }
-    return { type:['기타'], taste:'보통', cuisine:'한식', signatureMenu:'' };
+    if(!result){ result = { type:['기타'], taste:'보통', cuisine:'한식', signatureMenu:'' }; }
+    var mappedCuisine = CATEGORY_CUISINE_MAP[categoryMidTier(categoryName)];
+    if(mappedCuisine){ result.cuisine = mappedCuisine; }
+    return result;
   }
 
   // ============ overrides (localStorage 사용자 편집분) ============
@@ -653,7 +671,11 @@
   }
   function formatMenuItem(it){
     if(!it) return '';
-    return it.price ? (it.name + ' (' + Number(it.price).toLocaleString('ko-KR') + '원)') : it.name;
+    // 카카오/네이버 둘 다 가격 미정 메뉴를 -1(또는 0)로 내려주는 경우가 있어, 양수일 때만
+    // 가격을 붙인다 (truthy 체크만 하면 -1도 "유효한 가격"으로 오인해 "-1원"이 찍힘).
+    var price = Number(it.price);
+    var hasPrice = isFinite(price) && price > 0;
+    return hasPrice ? (it.name + ' (' + price.toLocaleString('ko-KR') + '원)') : it.name;
   }
   // 프록시 응답(items[])을 { signature, other } 형태로 변환. 사장님 추천(is_recommend) 항목을
   // 대표메뉴로, 나머지를 다른메뉴로 삼는다. 추천 표시가 없으면 그냥 첫 항목을 대표메뉴로 쓴다.
