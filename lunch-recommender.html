@@ -213,6 +213,23 @@
   .excluded-wrap{display:none;}
   .excluded-wrap.open{display:block;}
 
+  /* ---- 메뉴 단위 편집 (정보 편집 폼 내부) ---- */
+  .menu-edit-list{display:flex; flex-direction:column; gap:8px; margin-bottom:8px;}
+  .menu-edit-row{background:#fff; border:1px solid var(--border); border-radius:var(--r-sm); padding:8px;}
+  .menu-edit-top{display:flex; align-items:center; gap:6px; margin-bottom:6px;}
+  .menu-edit-top input[type="text"]{flex:1; min-width:0;}
+  .menu-edit-top input[type="number"]{width:90px;}
+  .menu-edit-top input[type="text"], .menu-edit-top input[type="number"]{
+    padding:6px 8px; border:1px solid var(--border); border-radius:var(--r-sm); background:#fff;
+    color:var(--text); font-family:inherit; font-size:13px;
+  }
+  .menu-edit-del{
+    flex:none; background:none; border:1px solid var(--border); border-radius:var(--r-sm);
+    color:var(--text-faint); cursor:pointer; width:26px; height:26px; font-size:12px;
+  }
+  .menu-edit-del:hover{color:#b3261e; border-color:#b3261e;}
+  .chip.small{padding:4px 10px; font-size:11px;}
+
   /* ---- 우리 오늘 뭐먹지 (팀 모드) ---- */
   .team-panel{padding:20px; margin-bottom:20px;}
   .team-panel-head{display:flex; justify-content:space-between; align-items:flex-start; gap:16px; flex-wrap:wrap;}
@@ -428,23 +445,54 @@
   ];
 
   // 카카오 연동 실패 시 보여줄 예시 데이터입니다. 실제 상호가 아니며, 재검색이 성공하면 실제 데이터로 대체됩니다.
+  // 메뉴 기준 추천(한 식당 안에 여러 형태의 메뉴가 섞여 있을 수 있음)을 보여주는 예시로 구성했다.
   var SEED_RESTAURANTS = [
-    { id:'seed:1', name:'가산 순두부찌개(예시)', categoryName:'음식점 > 한식 > 찌개,전골', distanceM:220,
-      type:['국물','밥'], taste:'보통', cuisine:'한식', signatureMenu:'순두부찌개', otherMenu:['된장찌개','제육볶음','공기밥추가'] },
-    { id:'seed:2', name:'매운짬뽕 전문점(예시)', categoryName:'음식점 > 중식', distanceM:90,
-      type:['면','국물'], taste:'매운맛', cuisine:'중식', signatureMenu:'불짬뽕', otherMenu:['짜장면','탕수육','군만두'] },
-    { id:'seed:3', name:'가산 돈까스(예시)', categoryName:'음식점 > 일식 > 돈까스,우동', distanceM:150,
-      type:['튀김','밥'], taste:'순한맛', cuisine:'일식', signatureMenu:'등심돈까스', otherMenu:['치즈돈까스','카레돈까스','우동'] },
-    { id:'seed:4', name:'산디 김밥천국(예시)', categoryName:'음식점 > 한식 > 분식', distanceM:40,
-      type:['분식'], taste:'순한맛', cuisine:'한식', signatureMenu:'참치김밥', otherMenu:['떡볶이','라볶이','순대'] },
-    { id:'seed:5', name:'라멘야(예시)', categoryName:'음식점 > 일식 > 면요리', distanceM:200,
-      type:['면','국물'], taste:'보통', cuisine:'일식', signatureMenu:'돈코츠라멘', otherMenu:['츠케멘','교자','생맥주'] },
-    { id:'seed:6', name:'가산 삼겹살집(예시)', categoryName:'음식점 > 한식 > 육류,고기', distanceM:240,
-      type:['구이'], taste:'보통', cuisine:'한식', signatureMenu:'제육쌈밥(런치)', otherMenu:['된장찌개','계란찜'] },
-    { id:'seed:7', name:'카페 브런치(예시)', categoryName:'카페 > 브런치카페', distanceM:60,
-      type:['기타'], taste:'순한맛', cuisine:'카페-디저트', signatureMenu:'크로플세트', otherMenu:['샌드위치','아메리카노','샐러드'] },
-    { id:'seed:8', name:'옛날 손칼국수(예시)', categoryName:'음식점 > 한식 > 칼국수', distanceM:180,
-      type:['면','국물'], taste:'순한맛', cuisine:'한식', signatureMenu:'바지락칼국수', otherMenu:['수제비','콩국수(계절)','보쌈소자'] }
+    { id:'seed:1', name:'가산 순두부찌개(예시)', categoryName:'음식점 > 한식 > 찌개,전골', distanceM:220, cuisine:'한식',
+      menuItems:[
+        { name:'순두부찌개', price:8000, isRecommend:true, type:['국물','밥'], taste:'매운맛' },
+        { name:'된장찌개', price:8000, isRecommend:false, type:['국물','밥'], taste:'보통' },
+        { name:'제육볶음', price:9000, isRecommend:false, type:['구이','밥'], taste:'매운맛' }
+      ] },
+    { id:'seed:2', name:'매운짬뽕 전문점(예시)', categoryName:'음식점 > 중식', distanceM:90, cuisine:'중식',
+      menuItems:[
+        { name:'불짬뽕', price:9000, isRecommend:true, type:['면','국물'], taste:'매운맛' },
+        { name:'짜장면', price:7000, isRecommend:false, type:['면'], taste:'순한맛' },
+        { name:'탕수육', price:18000, isRecommend:false, type:['튀김'], taste:'순한맛' }
+      ] },
+    { id:'seed:3', name:'가산 돈까스(예시)', categoryName:'음식점 > 일식 > 돈까스,우동', distanceM:150, cuisine:'일식',
+      menuItems:[
+        { name:'등심돈까스', price:11000, isRecommend:true, type:['튀김','밥'], taste:'순한맛' },
+        { name:'카레돈까스', price:12000, isRecommend:false, type:['튀김','밥'], taste:'순한맛' },
+        { name:'우동', price:8000, isRecommend:false, type:['면','국물'], taste:'순한맛' }
+      ] },
+    { id:'seed:4', name:'산디 김밥천국(예시)', categoryName:'음식점 > 한식 > 분식', distanceM:40, cuisine:'한식',
+      menuItems:[
+        { name:'참치김밥', price:4000, isRecommend:true, type:['분식'], taste:'순한맛' },
+        { name:'떡볶이', price:4000, isRecommend:false, type:['분식'], taste:'매운맛' },
+        { name:'순대', price:5000, isRecommend:false, type:['분식'], taste:'보통' }
+      ] },
+    { id:'seed:5', name:'라멘야(예시)', categoryName:'음식점 > 일식 > 면요리', distanceM:200, cuisine:'일식',
+      menuItems:[
+        { name:'돈코츠라멘', price:10000, isRecommend:true, type:['면','국물'], taste:'보통' },
+        { name:'교자', price:6000, isRecommend:false, type:['튀김'], taste:'보통' }
+      ] },
+    { id:'seed:6', name:'가산 삼겹살집(예시)', categoryName:'음식점 > 한식 > 육류,고기', distanceM:240, cuisine:'한식',
+      menuItems:[
+        { name:'제육쌈밥(런치)', price:9000, isRecommend:true, type:['구이','밥'], taste:'보통' },
+        { name:'된장찌개', price:5000, isRecommend:false, type:['국물','밥'], taste:'보통' }
+      ] },
+    { id:'seed:7', name:'카페 브런치(예시)', categoryName:'카페 > 브런치카페', distanceM:60, cuisine:'카페-디저트',
+      menuItems:[
+        { name:'크로플세트', price:9500, isRecommend:true, type:['기타'], taste:'순한맛' },
+        { name:'샌드위치', price:8500, isRecommend:false, type:['기타'], taste:'순한맛' },
+        { name:'아메리카노', price:4500, isRecommend:false, type:['기타'], taste:'보통' }
+      ] },
+    { id:'seed:8', name:'옛날 손칼국수(예시)', categoryName:'음식점 > 한식 > 칼국수', distanceM:180, cuisine:'한식',
+      menuItems:[
+        { name:'바지락칼국수', price:9000, isRecommend:true, type:['면','국물'], taste:'순한맛' },
+        { name:'수제비', price:9000, isRecommend:false, type:['면','국물'], taste:'순한맛' },
+        { name:'보쌈소자', price:25000, isRecommend:false, type:['구이'], taste:'보통' }
+      ] }
   ];
 
   // ============ state ============
@@ -513,22 +561,44 @@
     }
     return '';
   }
-  function autoFill(categoryName, name){
-    var hay = (categoryName||'') + ' ' + (name||'');
-    var result = null;
-    for(var i=0;i<TAG_RULES.length && !result;i++){
+  // 메뉴 하나의 형태/맛을 메뉴명 키워드로 추정한다 (식당 전체가 아니라 메뉴 단위 — 한 식당
+  // 안에 국물/밥/구이가 섞여 있어도 각 메뉴가 자기 형태를 갖도록).
+  function inferMenuTags(menuName){
+    var hay = menuName || '';
+    for(var i=0;i<TAG_RULES.length;i++){
       var rule = TAG_RULES[i];
       for(var j=0;j<rule.kw.length;j++){
-        if(hay.indexOf(rule.kw[j]) !== -1){
-          result = { type: rule.type.slice(), taste: rule.taste, cuisine: rule.cuisine, signatureMenu: rule.menu };
-          break;
-        }
+        if(hay.indexOf(rule.kw[j]) !== -1){ return { type: rule.type.slice(), taste: rule.taste }; }
       }
     }
-    if(!result){ result = { type:['기타'], taste:'보통', cuisine:'한식', signatureMenu:'' }; }
-    var mappedCuisine = inferCuisineFromCategory(categoryName);
-    if(mappedCuisine){ result.cuisine = mappedCuisine; }
-    return result;
+    return { type:['기타'], taste:'보통' };
+  }
+  // 메뉴 데이터를 하나도 못 구한 식당(자동조회 실패 + 아직 편집도 안 한 경우)의 최후 폴백 —
+  // 상호명/카테고리 키워드로 대표메뉴 이름 하나만 추정해서 최소한 빈 카드는 면한다.
+  function guessSignatureMenuName(categoryName, name){
+    var hay = (categoryName||'') + ' ' + (name||'');
+    for(var i=0;i<TAG_RULES.length;i++){
+      var rule = TAG_RULES[i];
+      for(var j=0;j<rule.kw.length;j++){
+        if(hay.indexOf(rule.kw[j]) !== -1) return rule.menu;
+      }
+    }
+    return '';
+  }
+  // 식당의 종류(cuisine)는 메뉴가 아니라 식당 단위로 유지한다 — 한 식당 안에서 한식/중식이
+  // 섞이는 경우는 드물고, 카카오 카테고리 기반 추정(inferCuisineFromCategory)이 이미 정확도가
+  // 높기 때문. 카테고리로 못 찾으면 상호명 키워드(TAG_RULES)로 폴백.
+  function inferCuisine(categoryName, name){
+    var mapped = inferCuisineFromCategory(categoryName);
+    if(mapped) return mapped;
+    var hay = (categoryName||'') + ' ' + (name||'');
+    for(var i=0;i<TAG_RULES.length;i++){
+      var rule = TAG_RULES[i];
+      for(var j=0;j<rule.kw.length;j++){
+        if(hay.indexOf(rule.kw[j]) !== -1) return rule.cuisine;
+      }
+    }
+    return '한식';
   }
 
   // ============ overrides (localStorage 사용자 편집분) ============
@@ -542,9 +612,23 @@
 
   function mergeRecord(raw, overrides){
     var saved = overrides[raw.id] || {};
-    var auto = autoFill(raw.categoryName, raw.name);
     var includedByGeometry = raw.includedByGeometry !== undefined ? raw.includedByGeometry : true;
     var manualOverride = ('manualOverride' in saved) ? saved.manualOverride : null;
+    var cuisine = saved.cuisine !== undefined ? saved.cuisine : (raw.cuisine || inferCuisine(raw.categoryName, raw.name));
+
+    // 메뉴 목록: 사용자가 직접 편집해뒀으면 그게 최우선, 없으면 자동조회(카카오/네이버) 결과,
+    // 그것도 없으면(아직 조회 전이거나 실패) 상호명 키워드로 대표메뉴 1개만 추정해서 최소한
+    // 빈 카드는 면한다.
+    var menuItems;
+    if(saved.menuItems !== undefined){
+      menuItems = saved.menuItems;
+    } else if(raw.menuItems && raw.menuItems.length){
+      menuItems = raw.menuItems;
+    } else {
+      var guess = guessSignatureMenuName(raw.categoryName, raw.name);
+      menuItems = guess ? [ Object.assign({ name: guess, price: null, isRecommend: true }, inferMenuTags(guess)) ] : [];
+    }
+
     return {
       id: raw.id, source: raw.source, name: raw.name, categoryName: raw.categoryName || '',
       phone: raw.phone || '', address: raw.address || '', lat: raw.lat, lng: raw.lng,
@@ -553,17 +637,13 @@
       includedByGeometry: includedByGeometry,
       manualOverride: manualOverride,
       isIncluded: manualOverride === null ? includedByGeometry : manualOverride,
-      tags: {
-        type: saved.tags ? saved.tags.type : (raw.type || auto.type),
-        taste: saved.tags ? saved.tags.taste : (raw.taste || auto.taste),
-        cuisine: saved.tags ? saved.tags.cuisine : (raw.cuisine || auto.cuisine)
-      },
-      signatureMenu: saved.signatureMenu !== undefined ? saved.signatureMenu : (raw.signatureMenu || auto.signatureMenu),
-      otherMenu: saved.otherMenu !== undefined ? saved.otherMenu : (raw.otherMenu || []),
-      // naverPlaceId만 저장하고 signatureMenu는 직접 타이핑하지 않은 경우, 값은 saved에 있지만
-      // 출처는 'manual'이 아니라 실제 조회 시점(fetchNaverMenuFor)에 결정된 값을 써야 하므로
-      // saved.menuSource를 우선한다. 메인 "저장" 버튼은 항상 menuSource:'manual'을 명시해서 저장한다.
-      menuSource: saved.menuSource || (saved.signatureMenu !== undefined ? 'manual' : (raw.menuSource || null)),
+      cuisine: cuisine,
+      menuItems: menuItems,
+      // menuItems만 저장하고 아직 자동조회 소스 표기가 없는 경우는 saved.menuSource를 우선한다
+      // (naverPlaceId 조회 결과를 그대로 저장한 경우가 여기 해당 — 사용자가 직접 타이핑한 게
+      // 아니므로 'manual'로 표시하면 안 됨). 메인 "저장" 버튼은 항상 menuSource:'manual'을
+      // 명시해서 저장한다.
+      menuSource: saved.menuSource || (saved.menuItems !== undefined ? 'manual' : (raw.menuSource || null)),
       // 네이버 place id는 자동 매칭이 불가능해서(공식 검색 API가 place id 자체를 안 줌) 사용자가
       // "정보 편집"에서 직접 입력해둔 값만 사용한다. 한 번 입력해두면 이후 재검색에서도 유지되고,
       // enrichMenus가 카카오보다 이 값을 우선해 네이버 메뉴를 조회한다(대개 더 잘 관리돼 있어서).
@@ -583,8 +663,7 @@
       return {
         id:s.id, source:'seed', name:s.name, categoryName:s.categoryName, distanceM:s.distanceM,
         includedByGeometry:true, railSide:null,
-        type:s.type, taste:s.taste, cuisine:s.cuisine,
-        signatureMenu:s.signatureMenu, otherMenu:s.otherMenu
+        cuisine:s.cuisine, menuItems:s.menuItems
       };
     });
   }
@@ -766,28 +845,36 @@
     var hasPrice = isFinite(price) && price > 0;
     return hasPrice ? (it.name + ' (' + price.toLocaleString('ko-KR') + '원)') : it.name;
   }
-  // 프록시 응답(items[])을 { signature, other } 형태로 변환. 사장님 추천(is_recommend) 항목을
-  // 대표메뉴로, 나머지를 다른메뉴로 삼는다. 추천 표시가 없으면 그냥 첫 항목을 대표메뉴로 쓴다.
-  function toMenuFields(items){
+  // 프록시 응답(items[])을 메뉴 아이템 배열로 변환하면서, 각 메뉴명에 형태/맛 태그를 붙인다
+  // (메뉴 기준 추천의 핵심 — 식당 전체가 아니라 메뉴 하나하나가 자기 형태/맛을 가짐).
+  function toMenuItems(items){
     if(!items || items.length === 0) return null;
-    var rec = items.filter(function(it){ return it.isRecommend; })[0] || items[0];
-    var others = items.filter(function(it){ return it !== rec; }).map(formatMenuItem);
-    return { signatureMenu: formatMenuItem(rec), otherMenu: others };
+    return items.map(function(it){
+      var tags = inferMenuTags(it.name);
+      var price = Number(it.price);
+      return {
+        name: it.name,
+        price: (isFinite(price) && price > 0) ? price : null,
+        isRecommend: !!it.isRecommend,
+        type: tags.type,
+        taste: tags.taste
+      };
+    });
   }
   // cacheNs로 캐시 키를 구분해서 카카오/네이버 메뉴가 서로 캐시를 덮어쓰지 않게 한다.
   function fetchMenuFrom(proxyParam, placeId, cacheNs, source){
     if(!CONFIG.MENU_PROXY_URL) return Promise.resolve(null);
     var cacheKey = cacheNs + ':' + placeId;
     var cached = menuCacheGet(cacheKey);
-    if(cached !== undefined) return Promise.resolve(cached ? Object.assign({}, cached, { source: source }) : null);
+    if(cached !== undefined) return Promise.resolve(cached ? { items: cached, source: source } : null);
     var url = CONFIG.MENU_PROXY_URL + (CONFIG.MENU_PROXY_URL.indexOf('?')===-1?'?':'&') + proxyParam + '=' + encodeURIComponent(placeId);
     return fetch(url).then(function(resp){
       if(!resp.ok) throw new Error('menu proxy status ' + resp.status);
       return resp.json();
     }).then(function(data){
-      var fields = toMenuFields(data && data.items);
-      menuCacheSet(cacheKey, fields); // null(메뉴 없음)도 캐싱해서 매번 재호출하지 않음
-      return fields ? Object.assign({}, fields, { source: source }) : null;
+      var menuItems = toMenuItems(data && data.items);
+      menuCacheSet(cacheKey, menuItems); // null(메뉴 없음)도 캐싱해서 매번 재호출하지 않음
+      return menuItems ? { items: menuItems, source: source } : null;
     }).catch(function(err){
       console.warn('[lunch-recommender] 메뉴 보강 실패 (' + cacheNs + '=' + placeId + '):', err && err.message);
       return null;
@@ -795,7 +882,7 @@
   }
   function fetchMenuFor(placeId){ return fetchMenuFrom('placeId', placeId, 'kakao', 'kakao-live'); }
   function fetchNaverMenuFor(placeId){ return fetchMenuFrom('naverPlaceId', placeId, 'naver', 'naver-live'); }
-  // rawList(mergeRecord 이전의 원본 배열)를 동시성 제한을 걸어 순회하며 메뉴 필드를 채워 넣는다.
+  // rawList(mergeRecord 이전의 원본 배열)를 동시성 제한을 걸어 순회하며 메뉴 목록을 채워 넣는다.
   // 네이버 place id가 수동으로 입력돼 있으면(대개 상점주가 더 잘 관리해둠) 그쪽을 우선 시도하고,
   // 없거나 실패하면 카카오 실시간 메뉴로 폴백한다. 배열 원소를 직접 mutate하므로, 끝난 뒤
   // setRestaurants(rawList)를 다시 호출하면 반영된다.
@@ -805,13 +892,12 @@
       var item = queue.shift();
       if(!item) return Promise.resolve();
       var task = item.naverPlaceId
-        ? fetchNaverMenuFor(item.naverPlaceId).then(function(fields){ return fields || (item.kakaoPlaceId ? fetchMenuFor(item.kakaoPlaceId) : null); })
+        ? fetchNaverMenuFor(item.naverPlaceId).then(function(res){ return res || (item.kakaoPlaceId ? fetchMenuFor(item.kakaoPlaceId) : null); })
         : fetchMenuFor(item.kakaoPlaceId);
-      return task.then(function(fields){
-        if(fields){
-          item.signatureMenu = fields.signatureMenu;
-          item.otherMenu = fields.otherMenu;
-          item.menuSource = fields.source;
+      return task.then(function(res){
+        if(res){
+          item.menuItems = res.items;
+          item.menuSource = res.source;
         }
       }).then(worker);
     }
@@ -876,23 +962,36 @@
     var idx = arr.indexOf(value);
     if(idx === -1) arr.push(value); else arr.splice(idx,1);
   }
-  function matchesTags(r){
+  // 메뉴 기준 추천의 핵심: 추천 단위는 "식당"이 아니라 "식당의 메뉴 하나"다. 형태/맛은 그 메뉴
+  // 자체의 태그로, 종류(cuisine)는 식당 단위로 판정한다(한 식당 안에서 한식/중식이 섞이는
+  // 경우는 드묾). 후보는 (식당, 메뉴) 쌍의 목록이 된다.
+  function menuMatchesSelection(menuItem, sel){
+    var typeOk = sel.type.length === 0 || sel.type.some(function(t){ return menuItem.type.indexOf(t) !== -1; });
+    var tasteOk = sel.taste.length === 0 || sel.taste.indexOf(menuItem.taste) !== -1;
+    return typeOk && tasteOk;
+  }
+  function restaurantMatchesCuisine(r, sel){
+    return sel.cuisine.length === 0 || sel.cuisine.indexOf(r.cuisine) !== -1;
+  }
+  function candidatePairs(){
     var sel = state.selected;
-    var typeOk = sel.type.length === 0 || sel.type.some(function(t){ return r.tags.type.indexOf(t) !== -1; });
-    var tasteOk = sel.taste.length === 0 || sel.taste.indexOf(r.tags.taste) !== -1;
-    var cuisineOk = sel.cuisine.length === 0 || sel.cuisine.indexOf(r.tags.cuisine) !== -1;
-    return typeOk && tasteOk && cuisineOk;
+    var pairs = [];
+    state.restaurants.forEach(function(r){
+      if(!r.isIncluded || !restaurantMatchesCuisine(r, sel)) return;
+      (r.menuItems||[]).forEach(function(m){
+        if(menuMatchesSelection(m, sel)) pairs.push({ restaurant: r, menu: m });
+      });
+    });
+    return pairs;
   }
-  function candidatePool(){
-    return state.restaurants.filter(function(r){ return r.isIncluded && matchesTags(r); });
-  }
+  function pairKey(pair){ return pair.restaurant.id + '::' + pair.menu.name; }
   function pickRandom(){
-    var pool = candidatePool();
+    var pool = candidatePairs();
     if(pool.length === 0) return null;
-    var fresh = pool.filter(function(r){ return state.recentIds.indexOf(r.id) === -1; });
+    var fresh = pool.filter(function(p){ return state.recentIds.indexOf(pairKey(p)) === -1; });
     var from = fresh.length > 0 ? fresh : pool;
     var chosen = from[Math.floor(Math.random()*from.length)];
-    state.recentIds.push(chosen.id);
+    state.recentIds.push(pairKey(chosen));
     if(state.recentIds.length > Math.max(1, pool.length - 1)) state.recentIds.shift();
     return chosen;
   }
@@ -918,20 +1017,21 @@
     });
   }
   function updateCtaState(){
-    var pool = candidatePool();
+    var pool = candidatePairs();
     var btn = $('recommendBtn'), help = $('ctaHelp');
     if(pool.length === 0){
       btn.disabled = true;
       help.hidden = false;
-      help.textContent = '선택한 조건에 맞는 식당이 없어요. 조건을 줄여보세요.';
+      help.textContent = '선택한 조건에 맞는 메뉴가 없어요. 조건을 줄여보세요.';
     } else {
       btn.disabled = false;
       help.hidden = true;
     }
   }
-  function renderResult(r){
+  function renderResult(pair){
     var card = $('resultCard');
-    if(!r){ card.hidden = true; return; }
+    if(!pair){ card.hidden = true; return; }
+    var r = pair.restaurant, menu = pair.menu;
     card.hidden = false;
     $('resultName').textContent = r.name;
     var metaParts = [];
@@ -942,10 +1042,11 @@
       metaParts.push('도보 약 ' + walkMin + '분');
     }
     $('resultMeta').textContent = metaParts.join(' · ');
-    $('resultSignature').textContent = r.signatureMenu || '(추천메뉴 미입력 — 아래 목록에서 편집해주세요)';
+    $('resultSignature').textContent = formatMenuItem(menu) || '(메뉴 미입력 — 아래 목록에서 편집해주세요)';
     var ul = $('resultOther'); ul.innerHTML = '';
-    (r.otherMenu||[]).forEach(function(m){ ul.appendChild(el('li', null, m)); });
-    if((r.otherMenu||[]).length === 0){ ul.appendChild(el('li', null, '(다른메뉴 미입력)')); }
+    var others = (r.menuItems||[]).filter(function(m){ return m !== menu; });
+    others.forEach(function(m){ ul.appendChild(el('li', null, formatMenuItem(m))); });
+    if(others.length === 0){ ul.appendChild(el('li', null, '(다른메뉴 없음)')); }
     var link = $('resultMapLink');
     if(r.placeUrl){ link.href = r.placeUrl; link.style.display = ''; }
     else { link.href = 'https://map.kakao.com/?q=' + encodeURIComponent(r.name); link.style.display = ''; }
@@ -959,10 +1060,10 @@
     }
   }
   function onRecommend(){
-    var r = pickRandom();
-    state.currentResultId = r ? r.id : null;
-    renderResult(r);
-    highlightResult(r);
+    var pair = pickRandom();
+    state.currentResultId = pair ? pairKey(pair) : null;
+    renderResult(pair);
+    highlightResult(pair ? pair.restaurant : null);
   }
 
   function renderList(){
@@ -1010,7 +1111,8 @@
     top.appendChild(el('div','r-row-name', r.name + badges));
     top.appendChild(el('div','r-row-dist', (r.distanceM!=null? r.distanceM+'m':'')));
     row.appendChild(top);
-    row.appendChild(el('div','r-row-cat', r.categoryName || ''));
+    var catLine = (r.categoryName || '') + ' · 메뉴 ' + (r.menuItems||[]).length + '개';
+    row.appendChild(el('div','r-row-cat', catLine));
 
     var sideToggle = el('div','side-toggle');
     var opts = [ ['auto','자동',null], ['in','포함',true], ['out','제외',false] ];
@@ -1036,39 +1138,17 @@
     row.appendChild(form);
     return row;
   }
+  // 메뉴 기준 추천으로 바뀌면서, 형태/맛은 이제 식당 단위가 아니라 메뉴 하나하나가 갖는다.
+  // 그래서 편집 폼도 "식당 전체에 태그 하나" 대신 "메뉴 목록을 행 단위로 편집"하는 형태로
+  // 구성한다. 종류(cuisine)만 여전히 식당 단위로 남는다.
   function buildEditForm(r){
     var form = el('div','edit-form');
 
-    var typeLabel = el('label', null, '형태 (복수 선택)');
-    form.appendChild(typeLabel);
-    var typeChips = el('div','chips');
-    var localType = r.tags.type.slice();
-    TYPE_OPTIONS.forEach(function(opt){
-      var chip = el('button','chip'+(localType.indexOf(opt)!==-1?' active':''), opt);
-      chip.type='button';
-      chip.addEventListener('click', function(){
-        var idx = localType.indexOf(opt);
-        if(idx===-1) localType.push(opt); else localType.splice(idx,1);
-        chip.classList.toggle('active');
-      });
-      typeChips.appendChild(chip);
-    });
-    form.appendChild(typeChips);
-
-    form.appendChild(el('label', null, '맛'));
-    var tasteSelect = el('select');
-    TASTE_OPTIONS.forEach(function(opt){
-      var o = el('option', null, opt); o.value = opt;
-      if(opt === r.tags.taste) o.selected = true;
-      tasteSelect.appendChild(o);
-    });
-    form.appendChild(tasteSelect);
-
-    form.appendChild(el('label', null, '종류'));
+    form.appendChild(el('label', null, '종류 (식당 전체 기준)'));
     var cuisineSelect = el('select');
     CUISINE_OPTIONS.forEach(function(opt){
       var o = el('option', null, opt); o.value = opt;
-      if(opt === r.tags.cuisine) o.selected = true;
+      if(opt === r.cuisine) o.selected = true;
       cuisineSelect.appendChild(o);
     });
     form.appendChild(cuisineSelect);
@@ -1084,6 +1164,91 @@
     var naverSaveBtn = el('button', 'btn btn-outline', '저장 & 조회');
     naverSaveBtn.type = 'button';
     naverSaveBtn.style.flex = 'none';
+    naverRow.appendChild(naverIdInput);
+    naverRow.appendChild(naverSaveBtn);
+    form.appendChild(naverRow);
+
+    form.appendChild(el('label', null, '메뉴 목록 (메뉴마다 형태/맛을 지정하면 그 조건에서 이 메뉴가 추천돼요)'));
+    var menuListWrap = el('div','menu-edit-list');
+    form.appendChild(menuListWrap);
+
+    // 서버/저장된 데이터를 그대로 mutate하지 않도록 로컬 사본으로 편집하다가 "저장" 시에만 반영.
+    var localMenus = (r.menuItems||[]).map(function(m){
+      return { name:m.name, price:m.price, isRecommend:!!m.isRecommend, type:(m.type||[]).slice(), taste:m.taste||'보통' };
+    });
+    if(localMenus.length === 0){ localMenus.push({ name:'', price:null, isRecommend:true, type:[], taste:'보통' }); }
+
+    function renderMenuRows(){
+      menuListWrap.innerHTML = '';
+      localMenus.forEach(function(menu, idx){
+        var row = el('div','menu-edit-row');
+
+        var topRow = el('div','menu-edit-top');
+        var recRadio = el('input'); recRadio.type='radio'; recRadio.name='rec-'+r.id.replace(/[^a-zA-Z0-9]/g,'_');
+        recRadio.checked = menu.isRecommend; recRadio.title='대표메뉴로 표시';
+        recRadio.addEventListener('change', function(){
+          localMenus.forEach(function(mm){ mm.isRecommend = false; });
+          menu.isRecommend = true;
+        });
+        topRow.appendChild(recRadio);
+
+        var nameInput = el('input'); nameInput.type='text'; nameInput.placeholder='메뉴명'; nameInput.value = menu.name;
+        nameInput.addEventListener('input', function(){ menu.name = nameInput.value; });
+        topRow.appendChild(nameInput);
+
+        var priceInput = el('input'); priceInput.type='number'; priceInput.placeholder='가격(선택)';
+        priceInput.value = menu.price!=null ? menu.price : '';
+        priceInput.addEventListener('input', function(){
+          var v = Number(priceInput.value);
+          menu.price = (priceInput.value !== '' && isFinite(v) && v > 0) ? v : null;
+        });
+        topRow.appendChild(priceInput);
+
+        var delBtn = el('button','menu-edit-del','✕'); delBtn.type='button'; delBtn.title='메뉴 삭제';
+        delBtn.addEventListener('click', function(){
+          localMenus.splice(idx,1);
+          if(localMenus.length===0) localMenus.push({ name:'', price:null, isRecommend:true, type:[], taste:'보통' });
+          renderMenuRows();
+        });
+        topRow.appendChild(delBtn);
+        row.appendChild(topRow);
+
+        var typeChips = el('div','chips');
+        TYPE_OPTIONS.forEach(function(opt){
+          var chip = el('button','chip small'+(menu.type.indexOf(opt)!==-1?' active':''), opt);
+          chip.type='button';
+          chip.addEventListener('click', function(){
+            var i2 = menu.type.indexOf(opt);
+            if(i2===-1) menu.type.push(opt); else menu.type.splice(i2,1);
+            chip.classList.toggle('active');
+          });
+          typeChips.appendChild(chip);
+        });
+        row.appendChild(typeChips);
+
+        var tasteSelect = el('select');
+        TASTE_OPTIONS.forEach(function(opt){
+          var o = el('option', null, opt); o.value = opt;
+          if(opt === menu.taste) o.selected = true;
+          tasteSelect.appendChild(o);
+        });
+        tasteSelect.addEventListener('change', function(){ menu.taste = tasteSelect.value; });
+        row.appendChild(tasteSelect);
+
+        menuListWrap.appendChild(row);
+      });
+    }
+    renderMenuRows();
+
+    var addMenuBtn = el('button','reset-link','+ 메뉴 추가');
+    addMenuBtn.type='button';
+    addMenuBtn.style.marginBottom = '8px';
+    addMenuBtn.addEventListener('click', function(){
+      localMenus.push({ name:'', price:null, isRecommend: localMenus.length===0, type:[], taste:'보통' });
+      renderMenuRows();
+    });
+    form.appendChild(addMenuBtn);
+
     naverSaveBtn.addEventListener('click', function(){
       var m = naverIdInput.value.match(/(\d{5,})/);
       var naverPlaceId = m ? m[1] : '';
@@ -1091,52 +1256,35 @@
       var saved = saveOverride(r.id, { naverPlaceId: naverPlaceId });
       r.naverPlaceId = saved.naverPlaceId;
       naverSaveBtn.disabled = true; naverSaveBtn.textContent = '조회 중…';
-      fetchNaverMenuFor(naverPlaceId).then(function(fields){
+      fetchNaverMenuFor(naverPlaceId).then(function(res){
         naverSaveBtn.disabled = false; naverSaveBtn.textContent = '저장 & 조회';
-        if(fields){
-          r.signatureMenu = fields.signatureMenu; r.otherMenu = fields.otherMenu; r.menuSource = fields.source;
-          sigInput.value = r.signatureMenu;
-          otherInput.value = r.otherMenu.join('\n');
+        if(res){
+          r.menuItems = res.items; r.menuSource = res.source;
+          localMenus.length = 0;
+          res.items.forEach(function(mi){ localMenus.push({ name:mi.name, price:mi.price, isRecommend:mi.isRecommend, type:mi.type.slice(), taste:mi.taste }); });
+          renderMenuRows();
           renderList(); updateCtaState();
         } else {
           alert('메뉴를 찾지 못했어요. place id가 맞는지, 그 식당에 메뉴 탭이 있는지 확인해주세요.');
         }
       });
     });
-    naverRow.appendChild(naverIdInput);
-    naverRow.appendChild(naverSaveBtn);
-    form.appendChild(naverRow);
-
-    form.appendChild(el('label', null, '추천메뉴 (대표메뉴 1개)'));
-    var sigInput = el('input'); sigInput.type='text'; sigInput.value = r.signatureMenu || '';
-    form.appendChild(sigInput);
-
-    // 구분자로 쉼표 대신 줄바꿈을 쓴다. 메뉴명 자체에 가격(예: "B세트 (12,900원)")이 포함돼
-    // 있으면 천단위 콤마가 구분자와 충돌해서 "B세트 (12" / "900원)"처럼 잘못 쪼개지는 버그가
-    // 있었음(실사용에서 발견됨).
-    form.appendChild(el('label', null, '다른메뉴 (한 줄에 하나씩)'));
-    var otherInput = el('textarea'); otherInput.value = (r.otherMenu||[]).join('\n');
-    form.appendChild(otherInput);
 
     var saveBtn = el('button','btn primary','저장');
     saveBtn.type='button';
     saveBtn.style.marginTop = '8px';
     saveBtn.addEventListener('click', function(){
-      var otherMenu = otherInput.value.split('\n').map(function(s){ return s.trim(); }).filter(Boolean);
-      var patch = {
-        tags: { type: localType, taste: tasteSelect.value, cuisine: cuisineSelect.value },
-        signatureMenu: sigInput.value.trim(),
-        otherMenu: otherMenu,
-        menuSource: 'manual',
-        edited: true
-      };
+      var menuItems = localMenus.filter(function(m){ return m.name.trim(); }).map(function(m){
+        return { name:m.name.trim(), price:m.price, isRecommend:!!m.isRecommend, type:m.type, taste:m.taste };
+      });
+      var patch = { cuisine: cuisineSelect.value, menuItems: menuItems, menuSource: 'manual', edited: true };
       var saved = saveOverride(r.id, patch);
-      r.tags = saved.tags; r.signatureMenu = saved.signatureMenu; r.otherMenu = saved.otherMenu; r.edited = true;
+      r.cuisine = saved.cuisine; r.menuItems = saved.menuItems; r.edited = true;
       renderList(); updateCtaState();
     });
     form.appendChild(saveBtn);
 
-    // 위 콤마/줄바꿈 버그로 이미 깨진 편집 내용이 저장돼 있을 수 있어, 되돌릴 방법을 만들어둔다.
+    // 콤마/줄바꿈 파싱 버그 등으로 이미 깨진 편집 내용이 저장돼 있을 수 있어, 되돌릴 방법을 만들어둔다.
     var resetBtn = el('button','reset-link','편집 내용 초기화 (자동 값으로 되돌리기)');
     resetBtn.type='button';
     resetBtn.style.marginLeft = '10px';
@@ -1164,7 +1312,7 @@
     $('lastSearchAt').textContent = '마지막 검색: ' + new Date().toLocaleString('ko-KR');
     storageSet('lastSearchAt', new Date().toISOString());
     // 처음 열었을 때도 바로 추천 결과가 보이도록 자동으로 한 번 뽑아둔다.
-    if(candidatePool().length > 0){ onRecommend(); } else { renderResult(null); }
+    if(candidatePairs().length > 0){ onRecommend(); } else { renderResult(null); }
   }
 
   // 카카오 목록은 이미 화면에 그려둔 상태에서, 실제 메뉴를 백그라운드로 마저 받아와 반영한다.
@@ -1187,8 +1335,14 @@
       renderList();
       updateCtaState();
       if(state.currentResultId){
-        var current = state.restaurants.filter(function(r){ return r.id === state.currentResultId; })[0];
-        if(current) renderResult(current);
+        var currentPair = null;
+        state.restaurants.some(function(r){
+          return (r.menuItems||[]).some(function(m){
+            if(r.id + '::' + m.name === state.currentResultId){ currentPair = { restaurant:r, menu:m }; return true; }
+            return false;
+          });
+        });
+        if(currentPair) renderResult(currentPair);
       }
       foot.textContent = prevText;
     });
@@ -1319,32 +1473,43 @@
     }).catch(function(err){ console.warn('[lunch-recommender] 팀 방 조회 실패:', err.message); });
   }
 
-  // 개인용 matchesTags와 반대 방향(제외 목록) 필터. type은 여러 개 중 하나라도 맞으면(OR) 통과.
-  function matchesMemberFilter(r, excluded){
+  // 개인용 menuMatchesSelection/restaurantMatchesCuisine과 반대 방향(제외 목록) 필터.
+  // type은 여러 개 중 하나라도 맞으면(OR) 통과 — 메뉴 하나하나에 대해 판정한다.
+  function menuMatchesMemberFilter(menuItem, excluded){
     var allowedType = TYPE_OPTIONS.filter(function(t){ return excluded.type.indexOf(t)===-1; });
     var allowedTaste = TASTE_OPTIONS.filter(function(t){ return excluded.taste.indexOf(t)===-1; });
-    var allowedCuisine = CUISINE_OPTIONS.filter(function(t){ return excluded.cuisine.indexOf(t)===-1; });
-    var typeOk = r.tags.type.some(function(t){ return allowedType.indexOf(t)!==-1; });
-    var tasteOk = allowedTaste.indexOf(r.tags.taste)!==-1;
-    var cuisineOk = allowedCuisine.indexOf(r.tags.cuisine)!==-1;
-    return typeOk && tasteOk && cuisineOk;
+    var typeOk = menuItem.type.some(function(t){ return allowedType.indexOf(t)!==-1; });
+    var tasteOk = allowedTaste.indexOf(menuItem.taste)!==-1;
+    return typeOk && tasteOk;
   }
-  function teamCandidatePool(members){
-    return state.restaurants.filter(function(r){
-      return r.isIncluded && members.every(function(m){ return matchesMemberFilter(r, m.excluded); });
+  function restaurantMatchesMemberCuisine(r, excluded){
+    var allowedCuisine = CUISINE_OPTIONS.filter(function(t){ return excluded.cuisine.indexOf(t)===-1; });
+    return allowedCuisine.indexOf(r.cuisine)!==-1;
+  }
+  function teamCandidatePairs(members){
+    var pairs = [];
+    state.restaurants.forEach(function(r){
+      if(!r.isIncluded) return;
+      if(!members.every(function(m){ return restaurantMatchesMemberCuisine(r, m.excluded); })) return;
+      (r.menuItems||[]).forEach(function(menu){
+        if(members.every(function(m){ return menuMatchesMemberFilter(menu, m.excluded); })){
+          pairs.push({ restaurant:r, menu:menu });
+        }
+      });
     });
+    return pairs;
   }
   // 전원 AND로 겹쳐서 후보가 없으면, 참여 순서(멤버1→2→3...) 그대로 한 명씩 제외하며 재시도한다.
-  // 끝까지 제외해도(= 조건 무시) 없을 일은 없다 — isIncluded 반경 내에 식당이 하나도 없을 때뿐.
+  // 끝까지 제외해도(= 조건 무시) 없을 일은 없다 — isIncluded 반경 내에 메뉴가 하나도 없을 때뿐.
   function pickTeamPool(members){
     for(var exclude=0; exclude<=members.length; exclude++){
       var included = members.slice(exclude);
-      var pool = teamCandidatePool(included);
-      if(pool.length > 0 || exclude === members.length){
-        return { pool: pool, excludedMembers: members.slice(0, exclude) };
+      var pairs = teamCandidatePairs(included);
+      if(pairs.length > 0 || exclude === members.length){
+        return { pairs: pairs, excludedMembers: members.slice(0, exclude) };
       }
     }
-    return { pool: [], excludedMembers: members };
+    return { pairs: [], excludedMembers: members };
   }
 
   function renderTeamConditionChips(group, options){
@@ -1452,13 +1617,21 @@
     var members = teamState.members;
     if(!members || members.length === 0) return;
     var picked = pickTeamPool(members);
-    var pool = picked.pool.length > 0 ? picked.pool : state.restaurants.filter(function(r){ return r.isIncluded; });
-    var chosen = pool.length > 0 ? pool[Math.floor(Math.random()*pool.length)] : null;
+    var pairs = picked.pairs;
+    if(pairs.length === 0){
+      // 조건을 다 무시해도(전원 제외) 없으면, 반경 내 식당의 메뉴 전체 중에서 뽑는다.
+      state.restaurants.filter(function(r){ return r.isIncluded; }).forEach(function(r){
+        (r.menuItems||[]).forEach(function(m){ pairs.push({ restaurant:r, menu:m }); });
+      });
+    }
+    var chosenPair = pairs.length > 0 ? pairs[Math.floor(Math.random()*pairs.length)] : null;
+    var chosen = chosenPair ? chosenPair.restaurant : null;
+    var menu = chosenPair ? chosenPair.menu : null;
     var result = chosen ? {
       name: chosen.name,
       meta: [chosen.categoryName && chosen.categoryName.replace(/^음식점\s*>\s*/,''), chosen.distanceM!=null ? chosen.distanceM+'m' : null].filter(Boolean).join(' · '),
-      signatureMenu: chosen.signatureMenu,
-      otherMenu: chosen.otherMenu,
+      signatureMenu: formatMenuItem(menu),
+      otherMenu: (chosen.menuItems||[]).filter(function(m){ return m !== menu; }).map(formatMenuItem),
       placeUrl: chosen.placeUrl || ('https://map.kakao.com/?q=' + encodeURIComponent(chosen.name)),
       excludedNames: picked.excludedMembers.map(function(m){ return m.name; })
     } : { name:null, excludedNames: picked.excludedMembers.map(function(m){ return m.name; }) };
