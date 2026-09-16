@@ -229,6 +229,10 @@
   }
   .menu-edit-del:hover{color:#b3261e; border-color:#b3261e;}
   .chip.small{padding:4px 10px; font-size:11px;}
+  .edit-form-notice{
+    background:#fff4f2; border:1px solid #f3c7bd; color:#8a3520; border-radius:var(--r-sm);
+    padding:8px 10px; font-size:11px; line-height:1.6; margin-bottom:10px;
+  }
 
   /* ---- 우리 오늘 뭐먹지 (팀 모드) ---- */
   .team-panel{padding:20px; margin-bottom:20px;}
@@ -1143,6 +1147,14 @@
   // 구성한다. 종류(cuisine)만 여전히 식당 단위로 남는다.
   function buildEditForm(r){
     var form = el('div','edit-form');
+
+    // 메뉴 자동조회가 아직 안 끝났거나 실패해서, 지금 보이는 메뉴가 상호명 키워드로 추정한
+    // 임시값일 수 있다. 그 상태 그대로 저장하면 나중에 실제 메뉴가 도착해도 이 추정치가
+    // 영구히 고정돼버리는 문제가 실사용에서 있었어서, 미리 경고해준다.
+    if(!r.menuSource && !r.edited){
+      form.appendChild(el('div','edit-form-notice',
+        '⚠️ 아직 실제 메뉴를 확인 못한 식당이에요 (상호명 추정치만 있음). 지금 그대로 저장하면 이 추정치가 고정돼요 — 잠시 기다려 자동조회가 끝나길 기다리거나, 직접 정확한 메뉴로 고쳐서 저장해주세요.'));
+    }
 
     form.appendChild(el('label', null, '종류 (식당 전체 기준)'));
     var cuisineSelect = el('select');
