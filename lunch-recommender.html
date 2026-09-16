@@ -834,6 +834,12 @@
     var all = storageGet('menuCache', {});
     var entry = all[placeId];
     if(!entry || (Date.now() - entry.ts) > CONFIG.MENU_CACHE_TTL_MS) return undefined;
+    // 식당 단위→메뉴 단위 리팩터 이전엔 이 캐시가 {signatureMenu, otherMenu} 객체를 저장했다.
+    // 그 시절 캐시가 아직 만료 안 된 채 남아있으면(TTL 24시간) 지금 코드가 기대하는 메뉴
+    // 배열이 아니라서, 그걸 그대로 쓰면 조용히 폴백(추정치)으로 빠져버리는 문제가 있었다
+    // (실사용에서 발견 — "정보 편집 초기화"로는 해결이 안 되는 별도 저장소라 더 헷갈렸음).
+    // 배열이 아닌 옛 형식이면 캐시 미스로 취급해 새로 조회하게 한다.
+    if(entry.data !== null && !Array.isArray(entry.data)) return undefined;
     return entry.data;
   }
   function menuCacheSet(placeId, data){
