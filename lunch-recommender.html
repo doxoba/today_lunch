@@ -213,10 +213,90 @@
   .excluded-wrap{display:none;}
   .excluded-wrap.open{display:block;}
 
+  /* ---- 우리 오늘 뭐먹지 (팀 모드) ---- */
+  .team-panel{padding:20px; margin-bottom:20px;}
+  .team-panel-head{display:flex; justify-content:space-between; align-items:flex-start; gap:16px; flex-wrap:wrap;}
+  .team-actions{display:flex; gap:8px; flex-wrap:wrap;}
+  .team-actions .btn{flex:none;}
+  .team-room{margin-top:18px; padding-top:16px; border-top:1px solid var(--border-soft);}
+  .team-code-row{display:flex; align-items:center; gap:10px; margin-bottom:14px; flex-wrap:wrap;}
+  .team-code{
+    font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:20px; font-weight:700;
+    letter-spacing:.08em; background:var(--accent-tint); color:var(--accent-dark);
+    padding:6px 14px; border-radius:var(--r-sm);
+  }
+  .team-role-badge{font-size:11px; font-weight:600; color:var(--accent); border:1px solid var(--accent); border-radius:var(--r-pill); padding:2px 10px;}
+  .team-members{display:flex; flex-direction:column; gap:6px; margin-bottom:16px;}
+  .team-member-row{
+    display:flex; justify-content:space-between; align-items:center; gap:10px;
+    padding:8px 12px; background:var(--surface); border-radius:var(--r-sm); font-size:13px;
+  }
+  .team-member-status{font-size:11px; font-weight:600; padding:2px 8px; border-radius:var(--r-pill);}
+  .team-member-status.ready{background:var(--accent-tint); color:var(--accent-dark);}
+  .team-member-status.waiting{background:#f4f5f6; color:var(--text-faint);}
+  .team-condition-group{margin-bottom:14px;}
+  .team-chip.off{background:#f4f5f6; color:var(--text-faint); border-color:var(--border-soft); text-decoration:line-through;}
+  .team-foot{display:flex; gap:8px; flex-wrap:wrap; align-items:center;}
+  .team-notice{font-size:12px; color:var(--text-muted); background:var(--surface); border-radius:var(--r-sm); padding:10px 12px; margin:12px 0;}
+  .team-result-card{
+    margin-top:14px; padding:16px; background:var(--surface); border-radius:var(--r-md);
+    box-shadow:0 0 0 1px var(--border-soft);
+  }
+
+  /* ---- 모달 ---- */
+  .modal-overlay{
+    position:fixed; inset:0; background:rgba(15,20,18,.45); display:flex; align-items:center;
+    justify-content:center; z-index:100; padding:16px;
+  }
+  .modal{
+    background:var(--bg); border-radius:var(--r-lg); box-shadow:0 20px 60px rgba(0,0,0,.25);
+    width:100%; max-width:380px; padding:20px;
+  }
+  .modal-head{display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;}
+  .modal-title{font-size:16px; font-weight:600; color:var(--text);}
+  .modal-close{background:none; border:none; color:var(--text-muted); cursor:pointer; font-size:18px; padding:2px; line-height:1;}
+  .modal-close:hover{color:var(--text);}
+  .modal-body input[type="text"]{
+    width:100%; padding:10px 12px; border:1px solid var(--border); border-radius:var(--r-sm);
+    background:#fff; color:var(--text); font-family:inherit; font-size:14px; box-sizing:border-box;
+  }
+  .modal-code-display{
+    display:flex; align-items:center; gap:10px; margin:14px 0;
+  }
+  .modal-code-display .team-code{font-size:24px; flex:1; text-align:center;}
+  .modal-help{font-size:12px; color:var(--text-muted); line-height:1.6; margin:0 0 4px;}
+  .modal-error{font-size:12px; color:#b3261e; margin:8px 0 0;}
+  .modal-actions{display:flex; gap:8px; margin-top:16px;}
+  .modal-actions .btn{flex:1;}
+
 </style>
 </head><body>
 
 <div class="shell">
+
+  <div class="panel team-panel" id="teamPanel">
+    <div class="team-panel-head">
+      <div>
+        <div class="section-label">우리 오늘 뭐먹지</div>
+        <p class="page-sub" style="margin:2px 0 0;">팀을 꾸려서 모두의 취향을 반영한 메뉴를 뽑아요</p>
+      </div>
+      <div class="team-actions" id="teamActionsInit">
+        <button class="btn btn-outline" id="teamInviteBtn" type="button"><i class="ph ph-user-plus" aria-hidden="true"></i>멤버 초대하기</button>
+        <button class="btn btn-outline" id="teamJoinBtn" type="button"><i class="ph ph-sign-in" aria-hidden="true"></i>멤버 참여하기</button>
+      </div>
+    </div>
+    <div id="teamRoomBody" hidden></div>
+  </div>
+
+  <div class="modal-overlay" id="modalOverlay" hidden>
+    <div class="modal" role="dialog" aria-modal="true">
+      <div class="modal-head">
+        <div class="modal-title" id="modalTitle"></div>
+        <button class="modal-close" id="modalCloseBtn" type="button" aria-label="닫기"><i class="ph ph-x" aria-hidden="true"></i></button>
+      </div>
+      <div class="modal-body" id="modalBody"></div>
+    </div>
+  </div>
 
   <div id="fallbackBanner" class="banner" hidden>
     카카오맵 연동을 사용할 수 없어 <b>예시 데이터</b>로 표시 중이에요. (카카오 키 미설정 / 도메인 미등록 / 이 화면이 Claude Artifact인 경우 등)
@@ -312,7 +392,11 @@
     // 비워두면(빈 문자열) 메뉴 보강 자체를 건너뛴다.
     MENU_PROXY_URL: 'https://kakao-menu-proxy.01-06.workers.dev/',
     MENU_FETCH_CONCURRENCY: 6,
-    MENU_CACHE_TTL_MS: 24 * 60 * 60 * 1000 // 24시간 — 같은 식당 재검색 시 프록시 재호출 방지
+    MENU_CACHE_TTL_MS: 24 * 60 * 60 * 1000, // 24시간 — 같은 식당 재검색 시 프록시 재호출 방지
+    // "우리 오늘 뭐먹지" 팀 모드 API. 같은 Worker에 /room, /room/join 등 경로로 얹혀있다
+    // (Cloudflare KV 바인딩(ROOMS)이 Worker에 설정돼 있어야 동작함).
+    TEAM_API_BASE: 'https://kakao-menu-proxy.01-06.workers.dev',
+    TEAM_POLL_MS: 4000
   };
 
   var TYPE_OPTIONS = ['면','밥','국물','구이','튀김','분식','기타'];
@@ -1101,6 +1185,277 @@
   }
   function hideFallbackBanner(){ $('fallbackBanner').hidden = true; }
 
+  // ============ 팀 모드: "우리 오늘 뭐먹지" ============
+  // 여러 멤버가 각자 다른 기기에서 조건을 제출하고, 방장이 전원의 조건을 AND로 겹쳐서
+  // 추천한다. 멤버 간 상태 공유가 필요해서 Cloudflare Worker + KV(ROOMS 바인딩)를 백엔드로
+  // 쓴다 — 이 앱에서 유일하게 "서버 상태"가 필요한 기능. 실시간 소켓 대신 폴링(TEAM_POLL_MS
+  // 간격)으로 현황을 갱신한다. 방/멤버 데이터는 6시간 뒤 자동 만료된다.
+  var teamState = {
+    code: null, memberId: null, memberName: null, isHost: false,
+    members: [], result: null,
+    myExcluded: { type:[], taste:[], cuisine:[] }, // 아직 서버에 제출 안 한, 편집 중인 내 조건
+    pollTimer: null
+  };
+
+  function teamApi(path, options){
+    return fetch(CONFIG.TEAM_API_BASE + path, options).then(function(resp){
+      return resp.json().catch(function(){ return null; }).then(function(data){
+        if(!resp.ok) throw new Error((data && data.error) || ('요청 실패 (' + resp.status + ')'));
+        return data;
+      });
+    });
+  }
+
+  // ---- 모달 ----
+  function openModal(title, bodyEl){
+    $('modalTitle').textContent = title;
+    var body = $('modalBody'); body.innerHTML = ''; body.appendChild(bodyEl);
+    $('modalOverlay').hidden = false;
+  }
+  function closeModal(){ $('modalOverlay').hidden = true; $('modalBody').innerHTML = ''; }
+  function copyToClipboard(text){
+    if(navigator.clipboard && navigator.clipboard.writeText){ return navigator.clipboard.writeText(text); }
+    return Promise.reject(new Error('clipboard API 미지원'));
+  }
+
+  function onTeamInviteClick(){
+    var body = el('div', null, '<p class="modal-help">코드를 생성하고 있어요…</p>');
+    openModal('멤버 초대하기', body);
+    teamApi('/room', { method:'POST' }).then(function(data){
+      body.innerHTML = '';
+      body.appendChild(el('p','modal-help','아래 코드를 팀원에게 공유해주세요. "멤버 참여하기"에 이 코드를 입력하면 팀에 합류합니다.'));
+      var display = el('div','modal-code-display');
+      display.appendChild(el('span','team-code', data.code));
+      var copyBtn = el('button','btn btn-outline','복사'); copyBtn.type='button';
+      copyBtn.addEventListener('click', function(){
+        copyToClipboard(data.code).then(function(){
+          copyBtn.textContent = '복사됨!';
+          setTimeout(function(){ copyBtn.textContent = '복사'; }, 1500);
+        }).catch(function(){ alert('복사에 실패했어요. 코드를 직접 선택해 복사해주세요: ' + data.code); });
+      });
+      display.appendChild(copyBtn);
+      body.appendChild(display);
+      var actions = el('div','modal-actions');
+      var startBtn = el('button','btn primary','시작하기'); startBtn.type='button';
+      startBtn.addEventListener('click', function(){ closeModal(); enterTeamRoom(data.code, data.memberId, data.name, true); });
+      actions.appendChild(startBtn);
+      body.appendChild(actions);
+    }).catch(function(err){
+      body.innerHTML = '';
+      body.appendChild(el('p','modal-error', '방을 만들지 못했어요: ' + err.message));
+    });
+  }
+
+  function onTeamJoinClick(){
+    var body = el('div');
+    body.appendChild(el('p','modal-help','방장에게 받은 6자리 코드를 입력해주세요.'));
+    var input = el('input'); input.type='text'; input.maxLength=6; input.placeholder='예: AB12CD';
+    body.appendChild(input);
+    var errorEl = el('p','modal-error'); errorEl.hidden = true;
+    body.appendChild(errorEl);
+    var actions = el('div','modal-actions');
+    var joinBtn = el('button','btn primary','참여하기'); joinBtn.type='button';
+    joinBtn.addEventListener('click', function(){
+      var code = input.value.trim().toUpperCase();
+      if(!/^[A-Z0-9]{6}$/.test(code)){ errorEl.textContent = '6자리 코드를 입력해주세요.'; errorEl.hidden=false; return; }
+      joinBtn.disabled = true; joinBtn.textContent = '참여 중…';
+      teamApi('/room/join', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ code: code }) })
+        .then(function(data){ closeModal(); enterTeamRoom(data.code, data.memberId, data.name, false); })
+        .catch(function(err){
+          joinBtn.disabled = false; joinBtn.textContent = '참여하기';
+          errorEl.textContent = err.message; errorEl.hidden = false;
+        });
+    });
+    actions.appendChild(joinBtn);
+    body.appendChild(actions);
+    openModal('멤버 참여하기', body);
+    input.focus();
+  }
+
+  function enterTeamRoom(code, memberId, name, isHost){
+    teamState.code = code; teamState.memberId = memberId; teamState.memberName = name; teamState.isHost = isHost;
+    teamState.myExcluded = { type:[], taste:[], cuisine:[] };
+    storageSet('team', { code:code, memberId:memberId, memberName:name, isHost:isHost });
+    $('teamActionsInit').hidden = true;
+    $('teamRoomBody').hidden = false;
+    if(teamState.pollTimer) clearInterval(teamState.pollTimer);
+    pollTeamRoom();
+    teamState.pollTimer = setInterval(pollTeamRoom, CONFIG.TEAM_POLL_MS);
+  }
+  function leaveTeamRoom(){
+    if(teamState.pollTimer){ clearInterval(teamState.pollTimer); teamState.pollTimer = null; }
+    teamState = { code:null, memberId:null, memberName:null, isHost:false, members:[], result:null, myExcluded:{type:[],taste:[],cuisine:[]}, pollTimer:null };
+    storageSet('team', null);
+    $('teamActionsInit').hidden = false;
+    $('teamRoomBody').hidden = true;
+    $('teamRoomBody').innerHTML = '';
+  }
+  function restoreTeamSession(){
+    var saved = storageGet('team', null);
+    if(saved && saved.code && saved.memberId){ enterTeamRoom(saved.code, saved.memberId, saved.memberName, !!saved.isHost); }
+  }
+  function pollTeamRoom(){
+    if(!teamState.code) return;
+    teamApi('/room?code=' + encodeURIComponent(teamState.code)).then(function(room){
+      teamState.members = room.members;
+      teamState.result = room.result;
+      renderTeamRoom();
+    }).catch(function(err){ console.warn('[lunch-recommender] 팀 방 조회 실패:', err.message); });
+  }
+
+  // 개인용 matchesTags와 반대 방향(제외 목록) 필터. type은 여러 개 중 하나라도 맞으면(OR) 통과.
+  function matchesMemberFilter(r, excluded){
+    var allowedType = TYPE_OPTIONS.filter(function(t){ return excluded.type.indexOf(t)===-1; });
+    var allowedTaste = TASTE_OPTIONS.filter(function(t){ return excluded.taste.indexOf(t)===-1; });
+    var allowedCuisine = CUISINE_OPTIONS.filter(function(t){ return excluded.cuisine.indexOf(t)===-1; });
+    var typeOk = r.tags.type.some(function(t){ return allowedType.indexOf(t)!==-1; });
+    var tasteOk = allowedTaste.indexOf(r.tags.taste)!==-1;
+    var cuisineOk = allowedCuisine.indexOf(r.tags.cuisine)!==-1;
+    return typeOk && tasteOk && cuisineOk;
+  }
+  function teamCandidatePool(members){
+    return state.restaurants.filter(function(r){
+      return r.isIncluded && members.every(function(m){ return matchesMemberFilter(r, m.excluded); });
+    });
+  }
+  // 전원 AND로 겹쳐서 후보가 없으면, 참여 순서(멤버1→2→3...) 그대로 한 명씩 제외하며 재시도한다.
+  // 끝까지 제외해도(= 조건 무시) 없을 일은 없다 — isIncluded 반경 내에 식당이 하나도 없을 때뿐.
+  function pickTeamPool(members){
+    for(var exclude=0; exclude<=members.length; exclude++){
+      var included = members.slice(exclude);
+      var pool = teamCandidatePool(included);
+      if(pool.length > 0 || exclude === members.length){
+        return { pool: pool, excludedMembers: members.slice(0, exclude) };
+      }
+    }
+    return { pool: [], excludedMembers: members };
+  }
+
+  function renderTeamConditionChips(group, options){
+    var wrap = el('div','chips');
+    options.forEach(function(opt){
+      var isOff = teamState.myExcluded[group].indexOf(opt) !== -1;
+      var chip = el('button','chip team-chip'+(isOff?' off':' active'), opt);
+      chip.type='button';
+      chip.addEventListener('click', function(){
+        var idx = teamState.myExcluded[group].indexOf(opt);
+        if(idx===-1) teamState.myExcluded[group].push(opt); else teamState.myExcluded[group].splice(idx,1);
+        renderTeamRoom();
+      });
+      wrap.appendChild(chip);
+    });
+    return wrap;
+  }
+
+  function buildTeamResultCard(result){
+    var card = el('div','team-result-card');
+    if(result.excludedNames && result.excludedNames.length > 0){
+      card.appendChild(el('div','team-notice',
+        result.excludedNames.join(', ') + '님의 조건이 만족되지 않아, 그 다음으로 조건을 충족하는 조합으로 추천했어요.'));
+    }
+    if(!result.name){
+      card.appendChild(el('div','result-empty', '조건에 맞는 식당을 찾지 못했어요.'));
+      return card;
+    }
+    card.appendChild(el('span','kicker','팀 추천메뉴'));
+    card.appendChild(el('div','result-name', result.name));
+    card.appendChild(el('div','result-meta', result.meta || ''));
+    card.appendChild(el('div','result-badge', result.signatureMenu || '(추천메뉴 미입력)'));
+    if(result.otherMenu && result.otherMenu.length){
+      card.appendChild(el('div','other-label','다른메뉴'));
+      var ul = el('ul','other-list');
+      result.otherMenu.forEach(function(m){ ul.appendChild(el('li',null,m)); });
+      card.appendChild(ul);
+    }
+    if(result.placeUrl){
+      var link = el('a','btn btn-outline', '지도에서 보기');
+      link.href = result.placeUrl; link.target='_blank'; link.rel='noopener';
+      link.style.display='inline-flex'; link.style.marginTop='10px';
+      card.appendChild(link);
+    }
+    return card;
+  }
+
+  function renderTeamRoom(){
+    var body = $('teamRoomBody');
+    body.innerHTML = '';
+    var wrap = el('div','team-room');
+
+    var codeRow = el('div','team-code-row');
+    codeRow.appendChild(el('span','team-code', teamState.code));
+    codeRow.appendChild(el('span','team-role-badge', (teamState.isHost?'방장 · ':'') + teamState.memberName));
+    var leaveBtn = el('button','reset-link','팀 모드 나가기');
+    leaveBtn.type='button';
+    leaveBtn.addEventListener('click', leaveTeamRoom);
+    codeRow.appendChild(leaveBtn);
+    wrap.appendChild(codeRow);
+
+    var memberList = el('div','team-members');
+    teamState.members.forEach(function(m){
+      var row = el('div','team-member-row');
+      row.appendChild(el('span', null, m.name + (m.id===teamState.memberId ? ' (나)' : '')));
+      row.appendChild(el('span','team-member-status ' + (m.ready?'ready':'waiting'), m.ready ? '준비완료' : '대기중'));
+      memberList.appendChild(row);
+    });
+    wrap.appendChild(memberList);
+
+    wrap.appendChild(el('div','group-label','형태 (클릭하면 제외돼요, 기본은 전체 허용)'));
+    var g1 = el('div','team-condition-group'); g1.appendChild(renderTeamConditionChips('type', TYPE_OPTIONS));
+    wrap.appendChild(g1);
+    wrap.appendChild(el('div','group-label','맛'));
+    var g2 = el('div','team-condition-group'); g2.appendChild(renderTeamConditionChips('taste', TASTE_OPTIONS));
+    wrap.appendChild(g2);
+    wrap.appendChild(el('div','group-label','종류'));
+    var g3 = el('div','team-condition-group'); g3.appendChild(renderTeamConditionChips('cuisine', CUISINE_OPTIONS));
+    wrap.appendChild(g3);
+
+    var foot = el('div','team-foot');
+    var readyBtn = el('button','btn primary','준비 완료'); readyBtn.type='button'; readyBtn.style.flex='none';
+    readyBtn.addEventListener('click', onTeamReadyClick);
+    foot.appendChild(readyBtn);
+    if(teamState.isHost){
+      var recBtn = el('button','btn primary','오늘 뭐먹지 (팀)'); recBtn.type='button'; recBtn.style.flex='none';
+      recBtn.addEventListener('click', onTeamRecommendClick);
+      foot.appendChild(recBtn);
+    }
+    wrap.appendChild(foot);
+
+    if(teamState.result){ wrap.appendChild(buildTeamResultCard(teamState.result)); }
+    body.appendChild(wrap);
+  }
+
+  function onTeamReadyClick(){
+    teamApi('/room/update', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ code: teamState.code, memberId: teamState.memberId, excluded: teamState.myExcluded, ready: true })
+    }).then(pollTeamRoom).catch(function(err){ alert('조건 제출에 실패했어요: ' + err.message); });
+  }
+
+  function onTeamRecommendClick(){
+    var members = teamState.members;
+    if(!members || members.length === 0) return;
+    var picked = pickTeamPool(members);
+    var pool = picked.pool.length > 0 ? picked.pool : state.restaurants.filter(function(r){ return r.isIncluded; });
+    var chosen = pool.length > 0 ? pool[Math.floor(Math.random()*pool.length)] : null;
+    var result = chosen ? {
+      name: chosen.name,
+      meta: [chosen.categoryName && chosen.categoryName.replace(/^음식점\s*>\s*/,''), chosen.distanceM!=null ? chosen.distanceM+'m' : null].filter(Boolean).join(' · '),
+      signatureMenu: chosen.signatureMenu,
+      otherMenu: chosen.otherMenu,
+      placeUrl: chosen.placeUrl || ('https://map.kakao.com/?q=' + encodeURIComponent(chosen.name)),
+      excludedNames: picked.excludedMembers.map(function(m){ return m.name; })
+    } : { name:null, excludedNames: picked.excludedMembers.map(function(m){ return m.name; }) };
+
+    teamApi('/room/result', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ code: teamState.code, result: result })
+    }).then(function(){
+      teamState.result = result;
+      renderTeamRoom();
+      if(chosen) highlightResult(chosen);
+    }).catch(function(err){ alert('추천 결과 저장에 실패했어요: ' + err.message); });
+  }
+
   // ============ 부트스트랩 ============
   function init(){
     state.recentIds = [];
@@ -1133,6 +1488,12 @@
     $('researchBtn').addEventListener('click', init);
     $('retryLiveBtn').addEventListener('click', init);
     init();
+
+    $('teamInviteBtn').addEventListener('click', onTeamInviteClick);
+    $('teamJoinBtn').addEventListener('click', onTeamJoinClick);
+    $('modalCloseBtn').addEventListener('click', closeModal);
+    $('modalOverlay').addEventListener('click', function(e){ if(e.target === $('modalOverlay')) closeModal(); });
+    restoreTeamSession();
   });
 })();
 </script>

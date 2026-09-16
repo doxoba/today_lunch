@@ -18,7 +18,7 @@ const CACHE_SECONDS = 60 * 60 * 24; // 1일 — 같은 식당 반복 조회 시 
 function corsHeaders() {
   return {
     'Access-Control-Allow-Origin': '*', // 필요시 배포 도메인으로 좁혀도 됨
-    'Access-Control-Allow-Methods': 'GET, OPTIONS',
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS', // 팀 모드(/room 등)가 POST를 쓰므로 추가
     'Access-Control-Allow-Headers': 'Content-Type',
     'Access-Control-Max-Age': '86400',
   };
@@ -42,6 +42,15 @@ export default {
     }
 
     const url = new URL(request.url);
+
+    // "우리 오늘 뭐먹지" 팀 모드: 방 생성/참여/조회/갱신/결과공유 (Cloudflare KV, ROOMS 바인딩 필요)
+    if (url.pathname === '/room') {
+      if (request.method === 'POST') return handleCreateRoom(env);
+      if (request.method === 'GET') return handleGetRoom(url, env);
+    }
+    if (url.pathname === '/room/join' && request.method === 'POST') return handleJoinRoom(request, env);
+    if (url.pathname === '/room/update' && request.method === 'POST') return handleUpdateMember(request, env);
+    if (url.pathname === '/room/result' && request.method === 'POST') return handleSetResult(request, env);
 
     // 네이버 플레이스 메뉴 조회. 네이버 지역검색 API는 place id를 안 주기 때문에(공식 API의
     // 근본적 한계로 확인됨) 자동 매칭은 포기하고, 사용자가 앱에서 직접 입력해둔 네이버 place id로만
@@ -126,6 +135,112 @@ export default {
     return response;
   },
 };
+
+// ============ "우리 오늘 뭐먹지" 팀 모드 (Cloudflare KV) ============
+// Worker Settings > Bindings에서 KV Namespace를 만들어 변수명 ROOMS로 바인딩해야 동작한다.
+// room 데이터: { code, createdAt, members:[{id,name,joinedAt,ready,excluded:{type,taste,cuisine}}], result }
+// 6시간 뒤 자동 만료(KV expirationTtl)되며, 별도의 방 삭제 API는 두지 않는다.
+const ROOM_TTL_SECONDS = 6 * 60 * 60;
+const ROOM_CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // 0/O, 1/I/L 등 혼동되는 문자는 제외
+
+function generateRoomCode() {
+  const arr = new Uint8Array(6);
+  crypto.getRandomValues(arr);
+  let code = '';
+  for (let i = 0; i < 6; i++) code += ROOM_CODE_CHARS[arr[i] % ROOM_CODE_CHARS.length];
+  return code;
+}
+
+function emptyExcluded() {
+  return { type: [], taste: [], cuisine: [] };
+}
+
+async function loadRoom(env, code) {
+  const raw = await env.ROOMS.get('room:' + code);
+  return raw ? JSON.parse(raw) : null;
+}
+
+async function saveRoom(env, room) {
+  await env.ROOMS.put('room:' + room.code, JSON.stringify(room), { expirationTtl: ROOM_TTL_SECONDS });
+}
+
+async function handleCreateRoom(env) {
+  if (!env.ROOMS) return json({ error: 'ROOMS KV 바인딩이 설정되지 않았습니다. Worker Settings에서 추가해주세요.' }, 500);
+
+  let code;
+  do {
+    code = generateRoomCode();
+  } while (await env.ROOMS.get('room:' + code));
+
+  const memberId = crypto.randomUUID();
+  const room = {
+    code,
+    createdAt: Date.now(),
+    members: [{ id: memberId, name: '멤버1', joinedAt: Date.now(), ready: false, excluded: emptyExcluded() }],
+    result: null,
+  };
+  await saveRoom(env, room);
+  return json({ code, memberId, name: '멤버1' });
+}
+
+async function handleJoinRoom(request, env) {
+  if (!env.ROOMS) return json({ error: 'ROOMS KV 바인딩이 설정되지 않았습니다.' }, 500);
+
+  const body = await request.json().catch(() => null);
+  const code = ((body && body.code) || '').toUpperCase().trim();
+  if (!/^[A-Z0-9]{6}$/.test(code)) {
+    return json({ error: '초대 코드는 영문 대문자+숫자 6자리여야 합니다.' }, 400);
+  }
+
+  const room = await loadRoom(env, code);
+  if (!room) return json({ error: '해당 코드의 방을 찾을 수 없어요. 코드를 다시 확인해주세요.' }, 404);
+
+  const memberId = crypto.randomUUID();
+  const name = '멤버' + (room.members.length + 1);
+  room.members.push({ id: memberId, name, joinedAt: Date.now(), ready: false, excluded: emptyExcluded() });
+  await saveRoom(env, room);
+  return json({ code, memberId, name });
+}
+
+async function handleGetRoom(url, env) {
+  if (!env.ROOMS) return json({ error: 'ROOMS KV 바인딩이 설정되지 않았습니다.' }, 500);
+  const code = (url.searchParams.get('code') || '').toUpperCase().trim();
+  const room = await loadRoom(env, code);
+  if (!room) return json({ error: '방을 찾을 수 없습니다 (만료됐을 수 있어요).' }, 404);
+  return json(room, 200, { 'Cache-Control': 'no-store' });
+}
+
+async function handleUpdateMember(request, env) {
+  if (!env.ROOMS) return json({ error: 'ROOMS KV 바인딩이 설정되지 않았습니다.' }, 500);
+
+  const body = await request.json().catch(() => null);
+  if (!body || !body.code || !body.memberId) return json({ error: '잘못된 요청입니다.' }, 400);
+  const code = body.code.toUpperCase().trim();
+
+  const room = await loadRoom(env, code);
+  if (!room) return json({ error: '방을 찾을 수 없습니다.' }, 404);
+  const member = room.members.find((m) => m.id === body.memberId);
+  if (!member) return json({ error: '방에서 이 멤버를 찾을 수 없습니다.' }, 404);
+
+  if (body.excluded) member.excluded = body.excluded;
+  if (typeof body.ready === 'boolean') member.ready = body.ready;
+  await saveRoom(env, room);
+  return json({ ok: true });
+}
+
+async function handleSetResult(request, env) {
+  if (!env.ROOMS) return json({ error: 'ROOMS KV 바인딩이 설정되지 않았습니다.' }, 500);
+
+  const body = await request.json().catch(() => null);
+  if (!body || !body.code) return json({ error: '잘못된 요청입니다.' }, 400);
+  const code = body.code.toUpperCase().trim();
+
+  const room = await loadRoom(env, code);
+  if (!room) return json({ error: '방을 찾을 수 없습니다.' }, 404);
+  room.result = body.result || null;
+  await saveRoom(env, room);
+  return json({ ok: true });
+}
 
 // 네이버 place 메뉴 페이지(SSR)를 가져와 __APOLLO_STATE__에서 Menu 타입 항목만 추출한다.
 async function handleNaverMenu(naverPlaceId) {
