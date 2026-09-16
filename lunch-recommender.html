@@ -1096,7 +1096,7 @@
         if(fields){
           r.signatureMenu = fields.signatureMenu; r.otherMenu = fields.otherMenu; r.menuSource = fields.source;
           sigInput.value = r.signatureMenu;
-          otherInput.value = r.otherMenu.join(', ');
+          otherInput.value = r.otherMenu.join('\n');
           renderList(); updateCtaState();
         } else {
           alert('메뉴를 찾지 못했어요. place id가 맞는지, 그 식당에 메뉴 탭이 있는지 확인해주세요.');
@@ -1111,15 +1111,18 @@
     var sigInput = el('input'); sigInput.type='text'; sigInput.value = r.signatureMenu || '';
     form.appendChild(sigInput);
 
-    form.appendChild(el('label', null, '다른메뉴 (쉼표로 구분)'));
-    var otherInput = el('textarea'); otherInput.value = (r.otherMenu||[]).join(', ');
+    // 구분자로 쉼표 대신 줄바꿈을 쓴다. 메뉴명 자체에 가격(예: "B세트 (12,900원)")이 포함돼
+    // 있으면 천단위 콤마가 구분자와 충돌해서 "B세트 (12" / "900원)"처럼 잘못 쪼개지는 버그가
+    // 있었음(실사용에서 발견됨).
+    form.appendChild(el('label', null, '다른메뉴 (한 줄에 하나씩)'));
+    var otherInput = el('textarea'); otherInput.value = (r.otherMenu||[]).join('\n');
     form.appendChild(otherInput);
 
     var saveBtn = el('button','btn primary','저장');
     saveBtn.type='button';
     saveBtn.style.marginTop = '8px';
     saveBtn.addEventListener('click', function(){
-      var otherMenu = otherInput.value.split(',').map(function(s){ return s.trim(); }).filter(Boolean);
+      var otherMenu = otherInput.value.split('\n').map(function(s){ return s.trim(); }).filter(Boolean);
       var patch = {
         tags: { type: localType, taste: tasteSelect.value, cuisine: cuisineSelect.value },
         signatureMenu: sigInput.value.trim(),
@@ -1132,6 +1135,19 @@
       renderList(); updateCtaState();
     });
     form.appendChild(saveBtn);
+
+    // 위 콤마/줄바꿈 버그로 이미 깨진 편집 내용이 저장돼 있을 수 있어, 되돌릴 방법을 만들어둔다.
+    var resetBtn = el('button','reset-link','편집 내용 초기화 (자동 값으로 되돌리기)');
+    resetBtn.type='button';
+    resetBtn.style.marginLeft = '10px';
+    resetBtn.addEventListener('click', function(){
+      if(!confirm('이 식당에 저장한 수동 편집/네이버 place id를 모두 지우고 자동 값으로 되돌릴까요?')) return;
+      var all = loadOverrides();
+      delete all[r.id];
+      storageSet('overrides', all);
+      location.reload();
+    });
+    form.appendChild(resetBtn);
     return form;
   }
 
@@ -1390,6 +1406,7 @@
     codeRow.appendChild(leaveBtn);
     wrap.appendChild(codeRow);
 
+    wrap.appendChild(el('p','modal-help','참여·조건제출 반영에 몇 초~수십 초 정도 걸릴 수 있어요. 안 보이면 잠시 기다려주세요.'));
     var memberList = el('div','team-members');
     teamState.members.forEach(function(m){
       var row = el('div','team-member-row');
