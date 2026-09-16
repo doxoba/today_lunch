@@ -138,8 +138,14 @@ export default {
 
 // ============ "우리 오늘 뭐먹지" 팀 모드 (Cloudflare KV) ============
 // Worker Settings > Bindings에서 KV Namespace를 만들어 변수명 ROOMS로 바인딩해야 동작한다.
-// room 데이터: { code, createdAt, members:[{id,name,joinedAt,ready,excluded:{type,taste,cuisine}}], result }
 // 6시간 뒤 자동 만료(KV expirationTtl)되며, 별도의 방 삭제 API는 두지 않는다.
+//
+// 멤버 데이터를 방(room) 하나의 값에 배열로 합쳐 넣지 않고, 멤버마다 별도의 키로 나눠서
+// 저장한다: room:{code}:meta (방 메타 + 결과), room:{code}:m:{memberId} (멤버 개별 상태).
+// 여러 멤버가 거의 동시에 "준비" 버튼을 누르는 게 이 기능의 핵심 사용 패턴인데, 만약 방
+// 전체를 하나의 키로 관리하면 read-modify-write 방식이라 나중에 쓰는 사람이 앞사람의
+// 변경사항을 통째로 덮어써서 유실시킬 수 있다(실제로 테스트 중 발견함). 키를 멤버별로
+// 쪼개면 서로 다른 키에 쓰는 것이라 이 경쟁 상태가 원천적으로 발생하지 않는다.
 const ROOM_TTL_SECONDS = 6 * 60 * 60;
 const ROOM_CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // 0/O, 1/I/L 등 혼동되는 문자는 제외
 
@@ -155,13 +161,30 @@ function emptyExcluded() {
   return { type: [], taste: [], cuisine: [] };
 }
 
-async function loadRoom(env, code) {
-  const raw = await env.ROOMS.get('room:' + code);
+function metaKey(code) { return 'room:' + code + ':meta'; }
+function memberKey(code, memberId) { return 'room:' + code + ':m:' + memberId; }
+function memberPrefix(code) { return 'room:' + code + ':m:'; }
+
+async function loadMeta(env, code) {
+  const raw = await env.ROOMS.get(metaKey(code));
   return raw ? JSON.parse(raw) : null;
 }
-
-async function saveRoom(env, room) {
-  await env.ROOMS.put('room:' + room.code, JSON.stringify(room), { expirationTtl: ROOM_TTL_SECONDS });
+async function saveMeta(env, meta) {
+  await env.ROOMS.put(metaKey(meta.code), JSON.stringify(meta), { expirationTtl: ROOM_TTL_SECONDS });
+}
+async function loadMember(env, code, memberId) {
+  const raw = await env.ROOMS.get(memberKey(code, memberId));
+  return raw ? JSON.parse(raw) : null;
+}
+async function saveMember(env, code, member) {
+  await env.ROOMS.put(memberKey(code, member.id), JSON.stringify(member), { expirationTtl: ROOM_TTL_SECONDS });
+}
+async function loadAllMembers(env, code) {
+  const listed = await env.ROOMS.list({ prefix: memberPrefix(code) });
+  const members = await Promise.all(
+    listed.keys.map((k) => env.ROOMS.get(k.name).then((raw) => (raw ? JSON.parse(raw) : null)))
+  );
+  return members.filter(Boolean).sort((a, b) => a.joinedAt - b.joinedAt);
 }
 
 async function handleCreateRoom(env) {
@@ -170,16 +193,12 @@ async function handleCreateRoom(env) {
   let code;
   do {
     code = generateRoomCode();
-  } while (await env.ROOMS.get('room:' + code));
+  } while (await env.ROOMS.get(metaKey(code)));
 
   const memberId = crypto.randomUUID();
-  const room = {
-    code,
-    createdAt: Date.now(),
-    members: [{ id: memberId, name: '멤버1', joinedAt: Date.now(), ready: false, excluded: emptyExcluded() }],
-    result: null,
-  };
-  await saveRoom(env, room);
+  const now = Date.now();
+  await saveMeta(env, { code, createdAt: now, memberCount: 1, result: null });
+  await saveMember(env, code, { id: memberId, name: '멤버1', joinedAt: now, ready: false, excluded: emptyExcluded() });
   return json({ code, memberId, name: '멤버1' });
 }
 
@@ -192,22 +211,26 @@ async function handleJoinRoom(request, env) {
     return json({ error: '초대 코드는 영문 대문자+숫자 6자리여야 합니다.' }, 400);
   }
 
-  const room = await loadRoom(env, code);
-  if (!room) return json({ error: '해당 코드의 방을 찾을 수 없어요. 코드를 다시 확인해주세요.' }, 404);
+  const meta = await loadMeta(env, code);
+  if (!meta) return json({ error: '해당 코드의 방을 찾을 수 없어요. 코드를 다시 확인해주세요.' }, 404);
 
+  // 참여가 완전히 동시에 몰리면 이 카운터 증가도 이론상 경쟁 상태가 있을 수 있지만(멤버 번호가
+  // 한 번쯤 겹치는 정도), 준비 상태 갱신처럼 데이터가 유실되는 건 아니라 감수할 만하다.
+  meta.memberCount = (meta.memberCount || 0) + 1;
+  const name = '멤버' + meta.memberCount;
   const memberId = crypto.randomUUID();
-  const name = '멤버' + (room.members.length + 1);
-  room.members.push({ id: memberId, name, joinedAt: Date.now(), ready: false, excluded: emptyExcluded() });
-  await saveRoom(env, room);
+  await saveMeta(env, meta);
+  await saveMember(env, code, { id: memberId, name, joinedAt: Date.now(), ready: false, excluded: emptyExcluded() });
   return json({ code, memberId, name });
 }
 
 async function handleGetRoom(url, env) {
   if (!env.ROOMS) return json({ error: 'ROOMS KV 바인딩이 설정되지 않았습니다.' }, 500);
   const code = (url.searchParams.get('code') || '').toUpperCase().trim();
-  const room = await loadRoom(env, code);
-  if (!room) return json({ error: '방을 찾을 수 없습니다 (만료됐을 수 있어요).' }, 404);
-  return json(room, 200, { 'Cache-Control': 'no-store' });
+  const meta = await loadMeta(env, code);
+  if (!meta) return json({ error: '방을 찾을 수 없습니다 (만료됐을 수 있어요).' }, 404);
+  const members = await loadAllMembers(env, code);
+  return json({ code: meta.code, createdAt: meta.createdAt, members, result: meta.result }, 200, { 'Cache-Control': 'no-store' });
 }
 
 async function handleUpdateMember(request, env) {
@@ -217,14 +240,12 @@ async function handleUpdateMember(request, env) {
   if (!body || !body.code || !body.memberId) return json({ error: '잘못된 요청입니다.' }, 400);
   const code = body.code.toUpperCase().trim();
 
-  const room = await loadRoom(env, code);
-  if (!room) return json({ error: '방을 찾을 수 없습니다.' }, 404);
-  const member = room.members.find((m) => m.id === body.memberId);
+  const member = await loadMember(env, code, body.memberId);
   if (!member) return json({ error: '방에서 이 멤버를 찾을 수 없습니다.' }, 404);
 
   if (body.excluded) member.excluded = body.excluded;
   if (typeof body.ready === 'boolean') member.ready = body.ready;
-  await saveRoom(env, room);
+  await saveMember(env, code, member);
   return json({ ok: true });
 }
 
@@ -235,10 +256,10 @@ async function handleSetResult(request, env) {
   if (!body || !body.code) return json({ error: '잘못된 요청입니다.' }, 400);
   const code = body.code.toUpperCase().trim();
 
-  const room = await loadRoom(env, code);
-  if (!room) return json({ error: '방을 찾을 수 없습니다.' }, 404);
-  room.result = body.result || null;
-  await saveRoom(env, room);
+  const meta = await loadMeta(env, code);
+  if (!meta) return json({ error: '방을 찾을 수 없습니다.' }, 404);
+  meta.result = body.result || null;
+  await saveMeta(env, meta);
   return json({ ok: true });
 }
 
