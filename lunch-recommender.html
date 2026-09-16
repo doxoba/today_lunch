@@ -1335,14 +1335,18 @@
       renderList();
       updateCtaState();
       if(state.currentResultId){
-        var currentPair = null;
-        state.restaurants.some(function(r){
-          return (r.menuItems||[]).some(function(m){
-            if(r.id + '::' + m.name === state.currentResultId){ currentPair = { restaurant:r, menu:m }; return true; }
-            return false;
-          });
-        });
-        if(currentPair) renderResult(currentPair);
+        // pairKey는 "식당id::메뉴명" 형식. 메뉴 자동조회 전 폴백 메뉴명(예: "쌀국수")으로
+        // 카드를 보여준 상태였다면, 실제 메뉴가 도착한 뒤엔 그 이름 그대로는 안 남아있는 게
+        // 정상이라(예: "소고기쌀국수(M)") 정확히 일치하는 메뉴를 못 찾을 수 있다. 그럴 땐 카드를
+        // 그대로 방치하지 말고, 같은 식당의 대표 메뉴(또는 첫 메뉴)로 교체해서 갱신한다.
+        var currentRestaurantId = state.currentResultId.split('::')[0];
+        var matched = state.restaurants.filter(function(r){ return r.id === currentRestaurantId; })[0];
+        if(matched && matched.menuItems && matched.menuItems.length){
+          var exact = matched.menuItems.filter(function(m){ return matched.id + '::' + m.name === state.currentResultId; })[0];
+          var menu = exact || matched.menuItems.filter(function(m){ return m.isRecommend; })[0] || matched.menuItems[0];
+          state.currentResultId = pairKey({ restaurant: matched, menu: menu });
+          renderResult({ restaurant: matched, menu: menu });
+        }
       }
       foot.textContent = prevText;
     });
