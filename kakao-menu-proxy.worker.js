@@ -15,6 +15,22 @@
 const KAKAO_API = 'https://place-api.map.kakao.com/places/panel3/';
 const CACHE_SECONDS = 60 * 60 * 24; // 1일 — 같은 식당 반복 조회 시 카카오 재호출 방지
 
+// ============ 구내식당/한식뷔페 "오늘의 메뉴" 이미지 (카카오톡 채널 프로필 사진) ============
+// 많은 구내식당/한식뷔페는 그날그날 메뉴를 텍스트가 아니라 카카오톡 채널(플러스친구) 프로필
+// 사진으로 올린다. pf.kakao.com/rocket-web/web/v2/profiles/{채널ID}는 실제로는 로그인 쿠키
+// 없이도(직접 curl로 검증함, 2026-09-17) 200으로 프로필 이미지 URL을 내려주는 사실상 공개
+// 엔드포인트라, 개인 로그인 세션에 의존하지 않고 이 Worker에서 안전하게 정기 호출할 수 있다.
+// 문서화 안 된 내부 API라는 점은 panel3(메뉴)와 동일 — 구조가 바뀌면 조용히 실패할 수 있음.
+const KAKAO_CHANNEL_PROFILE_API = 'https://pf.kakao.com/rocket-web/web/v2/profiles/';
+const CAFETERIA_IMAGE_CACHE_SECONDS = 60 * 60 * 3; // 3시간 — cron이 실패해도 하루 안에 몇 번은 스스로 갱신되게
+
+// 09:00(KST) 스케줄 프리패치 대상. 프론트엔드는 식당마다 이 채널ID를 "정보 편집"에서 직접
+// 입력해두고(네이버 place id와 동일한 수동 매핑 방식 — 자동 매칭 API가 없음), 이 목록은 그중
+// cron이 매일 아침 미리 캐시를 데워둘 채널들이다. 여기 없는 채널도 on-demand 요청 시엔 정상
+// 동작한다(그냥 그날 첫 요청이 카카오를 직접 호출할 뿐). 새 구내식당을 추가하면 이 배열에도
+// 채널ID를 추가해줘야 매일 9시에 미리 데워진다.
+const CAFETERIA_CHANNELS = ['_gdqxdn', '_NHxgEn', '_bXxkxhb'];
+
 function corsHeaders() {
   return {
     'Access-Control-Allow-Origin': '*', // 필요시 배포 도메인으로 좁혀도 됨
@@ -86,6 +102,12 @@ export default {
     const naverPlaceId = url.searchParams.get('naverPlaceId');
     if (naverPlaceId) {
       return handleNaverMenu(naverPlaceId);
+    }
+
+    // 구내식당/한식뷔페 "오늘의 메뉴" 이미지 (카카오톡 채널 프로필 사진)
+    const cafeteriaChannel = url.searchParams.get('cafeteriaChannel');
+    if (cafeteriaChannel) {
+      return handleCafeteriaMenu(cafeteriaChannel);
     }
 
     const placeId = url.searchParams.get('placeId');
@@ -161,7 +183,100 @@ export default {
     await cache.put(cacheKey, response.clone());
     return response;
   },
+
+  // Cloudflare 대시보드(Workers & Pages > 이 Worker > Settings > Triggers > Cron Triggers)에
+  // "0 0 * * *"(UTC 0시 = KST 9시)를 등록해두면 이 함수가 매일 그 시각에 자동 실행된다.
+  // 코드만으로는 cron 자체를 등록할 수 없어 대시보드(또는 wrangler.toml) 설정이 별도로 필요함.
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(prefetchCafeteriaMenus());
+  },
 };
+
+// ============ 구내식당/한식뷔페 메뉴 이미지 핸들러 ============
+function cafeteriaCacheRequest(channelId) {
+  return new Request('https://kakao-menu-proxy.internal/cafeteria-menu?channel=' + encodeURIComponent(channelId));
+}
+
+// 카카오 채널 프로필 응답에서 프로필 사진(오늘의 메뉴로 쓰이는 이미지)과, 그 카드가 마지막으로
+// 갱신된 시각을 뽑아낸다. updated_at은 "프로필 사진이 바뀐 시각"과 정확히 같다는 보장은 없지만
+// (카드 전체 갱신 시각), 호출부가 "이게 정말 오늘자 메뉴가 맞는지" 판단할 수 있는 유일한 신호라
+// 그대로 내려주고 최종 판단은 프론트엔드(사용자)에게 맡긴다.
+function parseCafeteriaProfile(data, channelId) {
+  const profileCard = (data && data.cards || []).find((c) => c && c.type === 'profile');
+  const profile = profileCard && profileCard.profile;
+  const image = profile && profile.profile_image;
+  if (!image || !image.xlarge_url) return null;
+  return {
+    channelId,
+    name: profile.name || null,
+    imageUrl: image.xlarge_url,
+    profileUpdatedAt: profileCard.updated_at || null,
+    fetchedAt: Date.now(),
+  };
+}
+
+async function fetchCafeteriaProfile(channelId) {
+  let resp;
+  try {
+    resp = await fetch(KAKAO_CHANNEL_PROFILE_API + channelId, {
+      headers: {
+        'accept': '*/*',
+        'accept-language': 'ko-KR,ko;q=0.9',
+        'referer': 'https://pf.kakao.com/' + channelId,
+        'user-agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36',
+      },
+    });
+  } catch (e) {
+    return null;
+  }
+  if (!resp.ok) return null;
+  let data;
+  try {
+    data = await resp.json();
+  } catch (e) {
+    return null;
+  }
+  return parseCafeteriaProfile(data, channelId);
+}
+
+async function handleCafeteriaMenu(channelId) {
+  if (!/^_[A-Za-z0-9_-]+$/.test(channelId)) {
+    return json({ error: 'channel 파라미터 형식이 올바르지 않습니다 (예: _gdqxdn).' }, 400);
+  }
+
+  const cache = caches.default;
+  const cacheKey = cafeteriaCacheRequest(channelId);
+  const cached = await cache.match(cacheKey);
+  if (cached) return cached;
+
+  const result = await fetchCafeteriaProfile(channelId);
+  if (!result) {
+    return json({ error: '채널 프로필 이미지를 가져오지 못했습니다.', channelId }, 502);
+  }
+
+  const response = json(result, 200, {
+    'Cache-Control': `public, max-age=${CAFETERIA_IMAGE_CACHE_SECONDS}`,
+  });
+  await cache.put(cacheKey, response.clone());
+  return response;
+}
+
+// cron(scheduled)이 매일 09:00(KST)에 이 함수를 호출해 CAFETERIA_CHANNELS의 캐시를 미리
+// 데워둔다. 한 채널이 실패해도(폐업/구조변경 등) 나머지는 계속 진행하도록 allSettled를 쓴다.
+async function prefetchCafeteriaMenus() {
+  const cache = caches.default;
+  await Promise.allSettled(
+    CAFETERIA_CHANNELS.map(async (channelId) => {
+      const result = await fetchCafeteriaProfile(channelId);
+      if (!result) return;
+      const response = json(result, 200, {
+        'Cache-Control': `public, max-age=${CAFETERIA_IMAGE_CACHE_SECONDS}`,
+      });
+      await cache.put(cafeteriaCacheRequest(channelId), response);
+    })
+  );
+}
 
 // ============ "우리 오늘 뭐먹지" 팀 모드 (Cloudflare KV) ============
 // Worker Settings > Bindings에서 KV Namespace를 만들어 변수명 ROOMS로 바인딩해야 동작한다.

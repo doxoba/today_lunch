@@ -131,6 +131,12 @@
     display:inline-block; background:var(--accent-tint); color:var(--accent-dark); font-size:16px;
     font-weight:600; padding:9px 16px; border-radius:var(--r-md); margin-bottom:16px; align-self:flex-start;
   }
+  .cafeteria-menu-image{margin:0 0 16px;}
+  .cafeteria-menu-image img{width:100%; border-radius:var(--r-md); display:block; box-shadow:0 0 0 1px var(--border-soft);}
+  .cafeteria-menu-note{font-size:11px; color:var(--text-faint); margin-top:6px;}
+  .r-row-cafeteria{margin-top:6px;}
+  .r-row-cafeteria img{max-width:120px; max-height:90px; border-radius:6px; display:block; box-shadow:0 0 0 1px var(--border-soft); cursor:pointer;}
+  .r-row-cafeteria-note{font-size:11px; color:var(--text-faint); margin-top:4px;}
   .other-label{font-size:11px; font-weight:500; color:var(--text-faint); margin:0 0 6px;}
   .other-list{margin:0 0 20px; padding-left:18px; font-size:13px; font-weight:400; line-height:1.7; color:var(--text-body);}
   .result-actions{display:flex; flex-wrap:wrap; gap:8px; margin-top:auto;}
@@ -311,6 +317,11 @@
   body.upload-mode .accordion, body.upload-mode #fallbackBanner{display:none;}
   #uploadPanel{display:none; padding:20px; margin-bottom:20px;}
   body.upload-mode #uploadPanel{display:block;}
+  .result-review-row{display:flex; gap:14px; margin:2px 0 8px;}
+  .result-review-row .edit-toggle{margin-top:0;}
+
+  .upload-photo-btns{display:flex; gap:8px; margin-top:4px;}
+  .upload-photo-btns .btn{flex:1;}
   #uploadPreviewImg{max-width:100%; max-height:240px; border-radius:var(--r-md); margin:10px 0;}
   #uploadPanel textarea{
     width:100%; margin-top:10px; padding:9px 11px; border:1px solid var(--border); border-radius:var(--r-sm);
@@ -351,7 +362,12 @@
   <div class="panel" id="uploadPanel">
     <div class="section-label" id="uploadRestaurantName"></div>
     <p class="page-sub" style="margin:4px 0 0;">사진과 한줄평 중 하나 이상을 남겨주세요 (둘 다 남겨도 좋아요)</p>
-    <input type="file" id="uploadPhotoInput" accept="image/*" capture="environment">
+    <div class="upload-photo-btns">
+      <button type="button" class="btn btn-outline" id="uploadCaptureBtn"><i class="ph ph-camera" aria-hidden="true"></i>사진 찍기</button>
+      <button type="button" class="btn btn-outline" id="uploadLibraryBtn"><i class="ph ph-image" aria-hidden="true"></i>사진 선택</button>
+    </div>
+    <input type="file" id="uploadPhotoCaptureInput" accept="image/*" capture="environment" hidden>
+    <input type="file" id="uploadPhotoLibraryInput" accept="image/*" hidden>
     <img id="uploadPreviewImg" alt="미리보기" hidden>
     <textarea id="uploadReviewText" placeholder="한줄평(선택)" maxlength="300"></textarea>
     <button class="btn primary" id="uploadSubmitBtn" type="button">등록하기</button>
@@ -403,7 +419,16 @@
         <span class="kicker">추천메뉴</span>
         <div class="result-name" id="resultName"></div>
         <div class="result-meta" id="resultMeta"></div>
+        <div class="result-review-row">
+          <button class="edit-toggle" id="resultReviewBtn" type="button">댓글 남기기</button>
+          <button class="edit-toggle" id="resultReviewToggle" type="button">댓글 보기</button>
+        </div>
+        <div class="review-panel" id="resultReviewPanel"></div>
         <div class="result-badge" id="resultSignature"></div>
+        <div class="cafeteria-menu-image" id="resultCafeteriaImage" hidden>
+          <img id="resultCafeteriaImg" alt="오늘의 메뉴 사진">
+          <div class="cafeteria-menu-note" id="resultCafeteriaNote"></div>
+        </div>
         <div class="other-label">다른메뉴</div>
         <ul class="other-list" id="resultOther"></ul>
         <div class="result-actions">
@@ -466,6 +491,11 @@
     MENU_PROXY_URL: 'https://kakao-menu-proxy.01-06.workers.dev/',
     MENU_FETCH_CONCURRENCY: 6,
     MENU_CACHE_TTL_MS: 24 * 60 * 60 * 1000, // 24시간 — 같은 식당 재검색 시 프록시 재호출 방지
+    // 구내식당/한식뷔페의 "오늘의 메뉴" 사진(카카오톡 채널 프로필 사진). 프록시가 3시간
+    // 단위로 캐시하고 매일 09시(KST) cron으로 미리 갱신해두므로, 프론트 캐시도 그와 맞춰
+    // 3시간으로 짧게 잡는다(메뉴 캐시처럼 24시간으로 두면 프록시가 갱신해도 하루 종일 옛 사진이
+    // 화면에 남아있을 수 있음).
+    CAFETERIA_IMAGE_CACHE_TTL_MS: 3 * 60 * 60 * 1000,
     // 이 시각 이후에 문을 여는 상점(저녁 전용 술집 등)은 점심 후보에서 아예 제외한다.
     LUNCH_OPEN_CUTOFF_HOUR: 13,
     // "우리 오늘 뭐먹지" 팀 모드 API. 같은 Worker에 /room, /room/join 등 경로로 얹혀있다
@@ -786,6 +816,12 @@
       // "정보 편집"에서 직접 입력해둔 값만 사용한다. 한 번 입력해두면 이후 재검색에서도 유지되고,
       // enrichMenus가 카카오보다 이 값을 우선해 네이버 메뉴를 조회한다(대개 더 잘 관리돼 있어서).
       naverPlaceId: saved.naverPlaceId || null,
+      // 카카오톡 채널 ID도 네이버 place id와 마찬가지로 자동 매칭 방법이 없어 사용자가 직접
+      // 입력해둔 값만 쓴다. 이미지 자체(cafeteriaMenuImage)는 저장하지 않고 매번 라이브로
+      // 다시 가져온다(오늘자 메뉴가 바뀌었을 수 있어서) — enrichMenus가 raw를 직접 mutate해둔
+      // 값을 여기서는 그대로 넘겨받기만 한다.
+      cafeteriaChannelId: saved.cafeteriaChannelId || null,
+      cafeteriaMenuImage: raw.cafeteriaMenuImage || null,
       edited: !!saved.edited
     };
   }
@@ -1037,6 +1073,53 @@
   function isExcludedByLunchHours(openHours){
     return !!openHours && typeof openHours.startMinutes === 'number' && openHours.startMinutes > CONFIG.LUNCH_OPEN_CUTOFF_HOUR * 60;
   }
+  // profileUpdatedAt은 "카카오톡 채널 프로필 카드가 마지막으로 갱신된 시각"일 뿐 "사진이 오늘
+  // 바뀌었다"는 보장은 아니지만(예: 사장님이 며칠째 같은 사진을 안 바꿨을 수도 있음), 사용자가
+  // "이 사진이 진짜 오늘 메뉴가 맞는지" 스스로 판단할 수 있는 유일한 단서라 그대로 노출한다.
+  function isCafeteriaImageFromToday(cafeteriaMenuImage){
+    if(!cafeteriaMenuImage || !cafeteriaMenuImage.profileUpdatedAt) return false;
+    var updated = new Date(cafeteriaMenuImage.profileUpdatedAt);
+    var now = new Date();
+    return updated.getFullYear() === now.getFullYear() && updated.getMonth() === now.getMonth() && updated.getDate() === now.getDate();
+  }
+  function cafeteriaImageNote(cafeteriaMenuImage){
+    if(!cafeteriaMenuImage) return '';
+    if(isCafeteriaImageFromToday(cafeteriaMenuImage)){
+      return '오늘(' + new Date(cafeteriaMenuImage.profileUpdatedAt).toLocaleDateString('ko-KR') + ') 갱신된 사진이에요.';
+    }
+    return '⚠️ 마지막 갱신: ' + new Date(cafeteriaMenuImage.profileUpdatedAt).toLocaleDateString('ko-KR') + ' — 오늘자 메뉴가 아닐 수 있어요.';
+  }
+  // ============ 구내식당/한식뷔페 "오늘의 메뉴" 사진 (카카오톡 채널 프로필 사진) ============
+  // 운영시간 캐시와 마찬가지로 별도 캐시로 둔다 — TAG_RULES_VERSION(메뉴 태깅 규칙)이 바뀌어도
+  // 이 사진 캐시는 무효화될 이유가 없어서 menuCache와는 독립적으로 관리한다.
+  function cafeteriaImageCacheGet(channelId){
+    var all = storageGet('cafeteriaImageCache', {});
+    var entry = all[channelId];
+    if(!entry || (Date.now() - entry.ts) > CONFIG.CAFETERIA_IMAGE_CACHE_TTL_MS) return undefined;
+    return entry.data;
+  }
+  function cafeteriaImageCacheSet(channelId, data){
+    var all = storageGet('cafeteriaImageCache', {});
+    all[channelId] = { data: data, ts: Date.now() };
+    storageSet('cafeteriaImageCache', all);
+  }
+  function fetchCafeteriaMenuImageFor(channelId){
+    if(!CONFIG.MENU_PROXY_URL || !channelId) return Promise.resolve(null);
+    var cached = cafeteriaImageCacheGet(channelId);
+    if(cached !== undefined) return Promise.resolve(cached);
+    var url = CONFIG.MENU_PROXY_URL + (CONFIG.MENU_PROXY_URL.indexOf('?')===-1?'?':'&') + 'cafeteriaChannel=' + encodeURIComponent(channelId);
+    return fetch(url).then(function(resp){
+      if(!resp.ok) throw new Error('cafeteria proxy status ' + resp.status);
+      return resp.json();
+    }).then(function(data){
+      var image = (data && data.imageUrl) ? data : null;
+      cafeteriaImageCacheSet(channelId, image);
+      return image;
+    }).catch(function(err){
+      console.warn('[lunch-recommender] 구내식당 메뉴 사진 조회 실패 (channel=' + channelId + '):', err && err.message);
+      return undefined; // null(없음)과 달리 캐싱하지 않아 다음에 다시 시도되게 함
+    });
+  }
   function formatMenuItem(it){
     if(!it) return '';
     // 카카오/네이버 둘 다 가격 미정 메뉴를 -1(또는 0)로 내려주는 경우가 있어, 양수일 때만
@@ -1092,23 +1175,28 @@
   // 없거나 실패하면 카카오 실시간 메뉴로 폴백한다. 배열 원소를 직접 mutate하므로, 끝난 뒤
   // setRestaurants(rawList)를 다시 호출하면 반영된다.
   function enrichMenus(rawList){
-    var queue = rawList.filter(function(r){ return r.kakaoPlaceId != null || r.naverPlaceId; }).slice();
+    var queue = rawList.filter(function(r){ return r.kakaoPlaceId != null || r.naverPlaceId || r.cafeteriaChannelId; }).slice();
     function worker(){
       var item = queue.shift();
       if(!item) return Promise.resolve();
       var menuTask = item.naverPlaceId
         ? fetchNaverMenuFor(item.naverPlaceId).then(function(res){ return res || (item.kakaoPlaceId ? fetchMenuFor(item.kakaoPlaceId) : null); })
-        : fetchMenuFor(item.kakaoPlaceId);
+        : (item.kakaoPlaceId != null ? fetchMenuFor(item.kakaoPlaceId) : Promise.resolve(null));
       // 운영시간은 메뉴 소스(카카오/네이버)와 무관하게 항상 카카오 기준으로 따로 조회한다.
       var hoursTask = item.kakaoPlaceId != null ? fetchOpenHoursFor(item.kakaoPlaceId) : Promise.resolve(undefined);
-      return Promise.all([menuTask, hoursTask]).then(function(results){
-        var res = results[0], openHours = results[1];
+      // 구내식당/한식뷔페 메뉴 사진은 채널ID가 수동으로 입력돼 있는 식당만 해당된다.
+      var cafeteriaTask = item.cafeteriaChannelId ? fetchCafeteriaMenuImageFor(item.cafeteriaChannelId) : Promise.resolve(undefined);
+      return Promise.all([menuTask, hoursTask, cafeteriaTask]).then(function(results){
+        var res = results[0], openHours = results[1], cafeteriaImage = results[2];
         if(res){
           item.menuItems = res.items;
           item.menuSource = res.source;
         }
         if(openHours !== undefined){
           item.openHours = openHours;
+        }
+        if(cafeteriaImage !== undefined){
+          item.cafeteriaMenuImage = cafeteriaImage;
         }
       }).then(worker);
     }
@@ -1268,6 +1356,11 @@
       help.hidden = true;
     }
   }
+  // "오늘 뭐 먹지?" 결과 카드(#resultCard)는 추천이 바뀔 때마다 재사용되는 단일 DOM이라,
+  // 지금 카드에 떠 있는 식당이 어느 것인지·댓글을 이미 불러왔는지를 따로 기억해둬야 한다
+  // (buildRow의 행별 클로저 변수와 달리 카드는 하나뿐이라 모듈 전역에 둔다).
+  var resultReviewRestaurant = null;
+  var resultReviewLoaded = false;
   function renderResult(pair){
     var card = $('resultCard');
     if(!pair){ card.hidden = true; return; }
@@ -1282,7 +1375,24 @@
       metaParts.push('도보 약 ' + walkMin + '분');
     }
     $('resultMeta').textContent = metaParts.join(' · ');
+
+    // 가게 하나하나를 직접 안 들어가 봐도 "오늘 뭐 먹지?" 결과 카드에서 바로 댓글을 남기거나
+    // 볼 수 있어야 한다는 요청 — 아래 목록(buildRow)의 댓글 버튼과 같은 함수를 재사용한다.
+    resultReviewRestaurant = r;
+    resultReviewLoaded = false;
+    var resultReviewPanel = $('resultReviewPanel');
+    resultReviewPanel.classList.remove('open');
+    resultReviewPanel.innerHTML = '';
+
     $('resultSignature').textContent = formatMenuItem(menu) || '(메뉴 미입력 — 아래 목록에서 편집해주세요)';
+    var cafeteriaImageWrap = $('resultCafeteriaImage');
+    if(r.cafeteriaMenuImage){
+      $('resultCafeteriaImg').src = r.cafeteriaMenuImage.imageUrl;
+      $('resultCafeteriaNote').textContent = cafeteriaImageNote(r.cafeteriaMenuImage);
+      cafeteriaImageWrap.hidden = false;
+    } else {
+      cafeteriaImageWrap.hidden = true;
+    }
     var ul = $('resultOther'); ul.innerHTML = '';
     var others = (r.menuItems||[]).filter(function(m){ return m !== menu; });
     others.forEach(function(m){ ul.appendChild(el('li', null, formatMenuItem(m))); });
@@ -1361,6 +1471,15 @@
     row.appendChild(top);
     var catLine = (r.categoryName || '') + ' · 메뉴 ' + (r.menuItems||[]).length + '개';
     row.appendChild(el('div','r-row-cat', catLine));
+
+    if(r.cafeteriaMenuImage){
+      var cafeteriaThumb = el('div','r-row-cafeteria');
+      var thumbImg = el('img'); thumbImg.src = r.cafeteriaMenuImage.imageUrl; thumbImg.alt = '오늘의 메뉴 사진';
+      thumbImg.addEventListener('click', function(){ window.open(r.cafeteriaMenuImage.imageUrl, '_blank', 'noopener'); });
+      cafeteriaThumb.appendChild(thumbImg);
+      cafeteriaThumb.appendChild(el('div','r-row-cafeteria-note', cafeteriaImageNote(r.cafeteriaMenuImage)));
+      row.appendChild(cafeteriaThumb);
+    }
 
     var sideToggle = el('div','side-toggle');
     var opts = [ ['auto','자동',null], ['in','포함',true], ['out','제외',false] ];
@@ -1446,6 +1565,56 @@
     naverRow.appendChild(naverIdInput);
     naverRow.appendChild(naverSaveBtn);
     form.appendChild(naverRow);
+
+    // 구내식당/한식뷔페는 메뉴를 텍스트가 아니라 카카오톡 채널 프로필 사진으로 올리는 경우가
+    // 많다. 이것도 네이버 place id와 마찬가지로 자동 매칭이 불가능해서(연결해주는 API가 없음)
+    // 사용자가 채널 URL(pf.kakao.com/_xxxxx)이나 채널ID를 직접 입력해둬야 한다.
+    form.appendChild(el('label', null, '카카오톡 채널 ID (선택 — 오늘의 메뉴를 사진으로 올리는 구내식당/한식뷔페용, pf.kakao.com/_xxxxx 링크 또는 _xxxxx만)'));
+    var cafeteriaRow = el('div'); cafeteriaRow.style.display = 'flex'; cafeteriaRow.style.gap = '6px';
+    var cafeteriaIdInput = el('input'); cafeteriaIdInput.type = 'text'; cafeteriaIdInput.style.flex = '1';
+    cafeteriaIdInput.placeholder = '예: _gdqxdn';
+    cafeteriaIdInput.value = r.cafeteriaChannelId || '';
+    var cafeteriaSaveBtn = el('button', 'btn btn-outline', '저장 & 조회');
+    cafeteriaSaveBtn.type = 'button';
+    cafeteriaSaveBtn.style.flex = 'none';
+    cafeteriaRow.appendChild(cafeteriaIdInput);
+    cafeteriaRow.appendChild(cafeteriaSaveBtn);
+    form.appendChild(cafeteriaRow);
+    var cafeteriaPreview = el('div');
+    cafeteriaPreview.style.marginBottom = '12px';
+    form.appendChild(cafeteriaPreview);
+    function renderCafeteriaPreview(){
+      cafeteriaPreview.innerHTML = '';
+      if(!r.cafeteriaMenuImage) return;
+      var img = el('img'); img.src = r.cafeteriaMenuImage.imageUrl; img.alt = '오늘의 메뉴 사진';
+      img.style.maxWidth = '160px'; img.style.borderRadius = '6px'; img.style.display = 'block';
+      cafeteriaPreview.appendChild(img);
+    }
+    renderCafeteriaPreview();
+
+    cafeteriaSaveBtn.addEventListener('click', function(){
+      var m = cafeteriaIdInput.value.match(/(_[A-Za-z0-9_-]+)/);
+      var channelId = m ? m[1] : '';
+      if(!channelId){ alert('카카오톡 채널 ID를 찾을 수 없어요. pf.kakao.com/_xxxxx 형태의 링크나 _xxxxx만 입력해주세요.'); return; }
+      var saved = saveOverride(r.id, { cafeteriaChannelId: channelId });
+      r.cafeteriaChannelId = saved.cafeteriaChannelId;
+      cafeteriaSaveBtn.disabled = true; cafeteriaSaveBtn.textContent = '조회 중…';
+      fetchCafeteriaMenuImageFor(channelId).then(function(res){
+        cafeteriaSaveBtn.disabled = false; cafeteriaSaveBtn.textContent = '저장 & 조회';
+        if(res){
+          r.cafeteriaMenuImage = res;
+          renderCafeteriaPreview();
+          renderList(); updateCtaState();
+          if(state.currentResultId && state.currentResultId.split('::')[0] === r.id && r.menuItems && r.menuItems.length){
+            var exact = r.menuItems.filter(function(m){ return r.id + '::' + m.name === state.currentResultId; })[0];
+            var menu = exact || r.menuItems.filter(function(m){ return m.isRecommend; })[0] || r.menuItems[0];
+            renderResult({ restaurant: r, menu: menu });
+          }
+        } else {
+          alert('메뉴 사진을 찾지 못했어요. 채널ID가 맞는지 확인해주세요.');
+        }
+      });
+    });
 
     form.appendChild(el('label', null, '메뉴 목록 (메뉴마다 형태/맛을 지정하면 그 조건에서 이 메뉴가 추천돼요)'));
     var menuListWrap = el('div','menu-edit-list');
@@ -1612,6 +1781,7 @@
     rawList.forEach(function(raw){
       var merged = byId[raw.id];
       if(merged && merged.naverPlaceId) raw.naverPlaceId = merged.naverPlaceId;
+      if(merged && merged.cafeteriaChannelId) raw.cafeteriaChannelId = merged.cafeteriaChannelId;
     });
     var foot = $('lastSearchAt');
     var prevText = foot.textContent;
@@ -2086,6 +2256,10 @@
     if(!placeId) return null;
     return { placeId: placeId, name: sp.get('name') || '(이름 없음)' };
   })();
+  // 업로드 모드에서 선택된 사진 파일. "사진 찍기"/"사진 선택" 두 input 중 어느 쪽에서 골랐든
+  // 여기 하나로 모아서 다룬다(카메라 촬영 vs 기존 사진 불러오기를 각 브라우저의 <input capture>
+  // 처리 방식 차이 없이 명시적으로 구분해서 제공하기 위함).
+  var uploadPhotoFile = null;
 
   function resizeImageFile(file, maxDim, quality){
     return new Promise(function(resolve, reject){
@@ -2111,14 +2285,19 @@
     document.body.classList.add('upload-mode');
     $('uploadRestaurantName').textContent = params.name;
 
-    var fileInput = $('uploadPhotoInput');
     var previewImg = $('uploadPreviewImg');
-    fileInput.addEventListener('change', function(){
-      var file = fileInput.files[0];
+    function onPhotoChosen(file){
+      uploadPhotoFile = file || null;
       if(!file){ previewImg.hidden = true; previewImg.src = ''; return; }
-      var url = URL.createObjectURL(file);
-      previewImg.src = url; previewImg.hidden = false;
-    });
+      previewImg.src = URL.createObjectURL(file);
+      previewImg.hidden = false;
+    }
+    var captureInput = $('uploadPhotoCaptureInput');
+    var libraryInput = $('uploadPhotoLibraryInput');
+    captureInput.addEventListener('change', function(){ onPhotoChosen(captureInput.files[0]); });
+    libraryInput.addEventListener('change', function(){ onPhotoChosen(libraryInput.files[0]); });
+    $('uploadCaptureBtn').addEventListener('click', function(){ captureInput.click(); });
+    $('uploadLibraryBtn').addEventListener('click', function(){ libraryInput.click(); });
 
     var submitBtn = $('uploadSubmitBtn');
     var statusEl = $('uploadStatus');
@@ -2126,7 +2305,7 @@
   }
 
   function onUploadSubmit(params, submitBtn, statusEl){
-    var file = $('uploadPhotoInput').files[0];
+    var file = uploadPhotoFile;
     var reviewText = $('uploadReviewText').value.trim().slice(0, 300);
     if(!file && !reviewText){
       statusEl.textContent = '사진이나 댓글 중 하나는 입력해주세요.';
@@ -2144,7 +2323,9 @@
       })
       .then(function(){
         statusEl.textContent = '등록됐어요! 다른 사진/댓글을 더 추가할 수 있어요.';
-        $('uploadPhotoInput').value = '';
+        uploadPhotoFile = null;
+        $('uploadPhotoCaptureInput').value = '';
+        $('uploadPhotoLibraryInput').value = '';
         $('uploadReviewText').value = '';
         $('uploadPreviewImg').hidden = true;
       })
@@ -2169,6 +2350,17 @@
 
     $('teamInviteBtn').addEventListener('click', onTeamInviteClick);
     $('teamJoinBtn').addEventListener('click', onTeamJoinClick);
+    $('resultReviewBtn').addEventListener('click', function(){
+      if(resultReviewRestaurant) onShowReviewQr(resultReviewRestaurant);
+    });
+    $('resultReviewToggle').addEventListener('click', function(){
+      var panel = $('resultReviewPanel');
+      var open = panel.classList.toggle('open');
+      if(open && !resultReviewLoaded && resultReviewRestaurant){
+        resultReviewLoaded = true;
+        loadReviewsIntoPanel(resultReviewRestaurant.id, panel);
+      }
+    });
     $('modalCloseBtn').addEventListener('click', closeModal);
     $('modalOverlay').addEventListener('click', function(e){ if(e.target === $('modalOverlay')) closeModal(); });
     restoreTeamSession();
