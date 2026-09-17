@@ -369,6 +369,7 @@
         <ul class="other-list" id="resultOther"></ul>
         <div class="result-actions">
           <button class="btn btn-outline-accent" id="rerollBtn" type="button"><i class="ph ph-shuffle" aria-hidden="true"></i>다시 뽑기</button>
+          <button class="btn btn-outline" id="skipRestaurantBtn" type="button"><i class="ph ph-prohibit" aria-hidden="true"></i>이 가게 넘기기</button>
           <a class="btn btn-outline" id="resultDirectionsLink" href="#" target="_blank" rel="noopener" hidden><i class="ph ph-navigation-arrow" aria-hidden="true"></i>길찾기</a>
           <a class="btn btn-outline" id="resultMapLink" href="#" target="_blank" rel="noopener">지도에서 보기</a>
         </div>
@@ -426,6 +427,8 @@
     MENU_PROXY_URL: 'https://kakao-menu-proxy.01-06.workers.dev/',
     MENU_FETCH_CONCURRENCY: 6,
     MENU_CACHE_TTL_MS: 24 * 60 * 60 * 1000, // 24시간 — 같은 식당 재검색 시 프록시 재호출 방지
+    // 이 시각 이후에 문을 여는 상점(저녁 전용 술집 등)은 점심 후보에서 아예 제외한다.
+    LUNCH_OPEN_CUTOFF_HOUR: 13,
     // "우리 오늘 뭐먹지" 팀 모드 API. 같은 Worker에 /room, /room/join 등 경로로 얹혀있다
     // (Cloudflare KV 바인딩(ROOMS)이 Worker에 설정돼 있어야 동작함).
     TEAM_API_BASE: 'https://kakao-menu-proxy.01-06.workers.dev',
@@ -545,6 +548,11 @@
     mode: 'loading', // 'live' | 'seed' | 'loading'
     selected: { type:[], taste:[], cuisine:[] },
     recentIds: [],
+    // "이 가게 넘기기"로 제외한 식당 id 목록. 파리바게트처럼 메뉴 수십 개짜리 식당이 있으면
+    // recentIds만으로는 재검(다시 뽑기)해도 같은 식당의 다른 메뉴만 계속 나올 수 있어서
+    // (recentIds가 pairKey=식당+메뉴 단위라 같은 식당 안에서 다 소진하는 데 오래 걸림),
+    // 식당 자체를 넘길 수 있는 별도 목록을 둔다. 검색 조건이 바뀌면(init/필터 변경) 초기화된다.
+    skippedRestaurantIds: [],
     currentResultId: null,
     officeSign: null,
     railAvailable: false,
@@ -684,6 +692,9 @@
   function mergeRecord(raw, overrides){
     var saved = overrides[raw.id] || {};
     var includedByGeometry = raw.includedByGeometry !== undefined ? raw.includedByGeometry : true;
+    // 운영시간 조회는 메뉴 자동조회와 함께 나중에(enrichAndRefresh) 비동기로 도착하므로, 아직 안
+    // 왔으면(raw.openHours === undefined) "판단 불가"로 보고 제외하지 않는다.
+    var excludedByHours = isExcludedByLunchHours(raw.openHours);
     var manualOverride = ('manualOverride' in saved) ? saved.manualOverride : null;
     // 종류 8분류 개편(2026-09-16) 이전에 저장된 편집분은 옛 taxonomy 값('한식' 등)을 그대로
     // 갖고 있을 수 있다. CUISINE_OPTIONS에 없는 값이면 무시하고 다시 추정한다 — 그대로 두면
@@ -710,8 +721,10 @@
       distanceM: raw.distanceM, placeUrl: raw.placeUrl || '',
       railSide: raw.railSide !== undefined ? raw.railSide : null,
       includedByGeometry: includedByGeometry,
+      excludedByHours: excludedByHours,
+      openHours: raw.openHours || null,
       manualOverride: manualOverride,
-      isIncluded: manualOverride === null ? includedByGeometry : manualOverride,
+      isIncluded: manualOverride === null ? (includedByGeometry && !excludedByHours) : manualOverride,
       cuisine: cuisine,
       menuItems: menuItems,
       // menuItems만 저장하고 아직 자동조회 소스 표기가 없는 경우는 saved.menuSource를 우선한다
@@ -936,6 +949,44 @@
     all[placeId] = { data: data, ts: Date.now() };
     storageSet('menuCache', all);
   }
+  // ============ 운영시간 필터 (13시 이후 오픈 상점 제외) ============
+  // 메뉴 프록시가 카카오 panel3 응답에서 오늘자 오픈 시각(분 단위)을 같이 내려준다(openHours).
+  // 별도 캐시로 두는 이유: 메뉴 캐시(menuCache)는 TAG_RULES_VERSION이 바뀌면 무효화되는데,
+  // 영업시간은 태그 규칙과 무관해서 같이 무효화될 필요가 없다.
+  function openHoursCacheGet(placeId){
+    var all = storageGet('openHoursCache', {});
+    var entry = all[placeId];
+    if(!entry || (Date.now() - entry.ts) > CONFIG.MENU_CACHE_TTL_MS) return undefined;
+    return entry.data;
+  }
+  function openHoursCacheSet(placeId, data){
+    var all = storageGet('openHoursCache', {});
+    all[placeId] = { data: data, ts: Date.now() };
+    storageSet('openHoursCache', all);
+  }
+  // 항상 카카오 placeId로 조회한다(네이버 메뉴를 우선 쓰는 식당이라도, 운영시간 판정은 카카오
+  // 기준으로 통일). 실패하거나 정보가 없으면 undefined/null을 돌려주고, 호출부에서 "판단 불가"로
+  // 취급해 제외하지 않는다(잘못 제외시키는 것보다 안전한 쪽).
+  function fetchOpenHoursFor(kakaoPlaceId){
+    if(!CONFIG.MENU_PROXY_URL || kakaoPlaceId == null) return Promise.resolve(undefined);
+    var cached = openHoursCacheGet(kakaoPlaceId);
+    if(cached !== undefined) return Promise.resolve(cached);
+    var url = CONFIG.MENU_PROXY_URL + (CONFIG.MENU_PROXY_URL.indexOf('?')===-1?'?':'&') + 'placeId=' + encodeURIComponent(kakaoPlaceId);
+    return fetch(url).then(function(resp){
+      if(!resp.ok) throw new Error('menu proxy status ' + resp.status);
+      return resp.json();
+    }).then(function(data){
+      var openHours = (data && data.openHours) || null;
+      openHoursCacheSet(kakaoPlaceId, openHours);
+      return openHours;
+    }).catch(function(err){
+      console.warn('[lunch-recommender] 운영시간 조회 실패 (placeId=' + kakaoPlaceId + '):', err && err.message);
+      return undefined;
+    });
+  }
+  function isExcludedByLunchHours(openHours){
+    return !!openHours && typeof openHours.startMinutes === 'number' && openHours.startMinutes > CONFIG.LUNCH_OPEN_CUTOFF_HOUR * 60;
+  }
   function formatMenuItem(it){
     if(!it) return '';
     // 카카오/네이버 둘 다 가격 미정 메뉴를 -1(또는 0)로 내려주는 경우가 있어, 양수일 때만
@@ -995,13 +1046,19 @@
     function worker(){
       var item = queue.shift();
       if(!item) return Promise.resolve();
-      var task = item.naverPlaceId
+      var menuTask = item.naverPlaceId
         ? fetchNaverMenuFor(item.naverPlaceId).then(function(res){ return res || (item.kakaoPlaceId ? fetchMenuFor(item.kakaoPlaceId) : null); })
         : fetchMenuFor(item.kakaoPlaceId);
-      return task.then(function(res){
+      // 운영시간은 메뉴 소스(카카오/네이버)와 무관하게 항상 카카오 기준으로 따로 조회한다.
+      var hoursTask = item.kakaoPlaceId != null ? fetchOpenHoursFor(item.kakaoPlaceId) : Promise.resolve(undefined);
+      return Promise.all([menuTask, hoursTask]).then(function(results){
+        var res = results[0], openHours = results[1];
         if(res){
           item.menuItems = res.items;
           item.menuSource = res.source;
+        }
+        if(openHours !== undefined){
+          item.openHours = openHours;
         }
       }).then(worker);
     }
@@ -1065,6 +1122,7 @@
     var arr = state.selected[group];
     var idx = arr.indexOf(value);
     if(idx === -1) arr.push(value); else arr.splice(idx,1);
+    state.skippedRestaurantIds = [];
   }
   // 메뉴 기준 추천의 핵심: 추천 단위는 "식당"이 아니라 "식당의 메뉴 하나"다. 형태/맛은 그 메뉴
   // 자체의 태그로, 종류(cuisine)는 식당 단위로 판정한다(한 식당 안에서 한식/중식이 섞이는
@@ -1092,11 +1150,16 @@
   function pickRandom(){
     var pool = candidatePairs();
     if(pool.length === 0) return null;
-    var fresh = pool.filter(function(p){ return state.recentIds.indexOf(pairKey(p)) === -1; });
-    var from = fresh.length > 0 ? fresh : pool;
+    var notSkipped = pool.filter(function(p){ return state.skippedRestaurantIds.indexOf(p.restaurant.id) === -1; });
+    // 넘긴 식당을 빼고 나니 후보가 하나도 안 남으면(예: 후보 식당이 원래 1~2곳뿐이었던 경우),
+    // 계속 결과 없음으로 막히는 것보다는 넘긴 목록을 비우고 처음부터 다시 고르는 게 낫다.
+    if(notSkipped.length === 0) state.skippedRestaurantIds = [];
+    var usable = notSkipped.length > 0 ? notSkipped : pool;
+    var fresh = usable.filter(function(p){ return state.recentIds.indexOf(pairKey(p)) === -1; });
+    var from = fresh.length > 0 ? fresh : usable;
     var chosen = from[Math.floor(Math.random()*from.length)];
     state.recentIds.push(pairKey(chosen));
-    if(state.recentIds.length > Math.max(1, pool.length - 1)) state.recentIds.shift();
+    if(state.recentIds.length > Math.max(1, usable.length - 1)) state.recentIds.shift();
     return chosen;
   }
 
@@ -1192,6 +1255,13 @@
     renderResult(pair);
     highlightResult(pair ? pair.restaurant : null);
   }
+  function onSkipRestaurant(){
+    if(state.currentResultId){
+      var restaurantId = state.currentResultId.split('::')[0];
+      if(state.skippedRestaurantIds.indexOf(restaurantId) === -1) state.skippedRestaurantIds.push(restaurantId);
+    }
+    onRecommend();
+  }
 
   function renderList(){
     var body = $('listBody');
@@ -1215,7 +1285,7 @@
 
     if(excluded.length > 0){
       var labelFor = function(open){
-        return (open ? '제외된 식당 숨기기' : '제외된 식당 ' + excluded.length + '곳 보기 (반경 밖 · 철길 반대편)');
+        return (open ? '제외된 식당 숨기기' : '제외된 식당 ' + excluded.length + '곳 보기 (반경 밖 · 철길 반대편 · 13시 이후 오픈)');
       };
       var wrap = el('div','excluded-wrap');
       excluded.forEach(function(r){ wrap.appendChild(buildRow(r)); });
@@ -1234,7 +1304,8 @@
     var top = el('div','r-row-top');
     var menuBadgeLabel = r.menuSource === 'naver-live' ? '네이버 메뉴' : (r.menuSource === 'kakao-live' ? '카카오 실시간 메뉴' : '');
     var badges = (r.edited ? '<span class="badge">수정됨</span>' : '') +
-      (!r.edited && menuBadgeLabel ? '<span class="badge">' + menuBadgeLabel + '</span>' : '');
+      (!r.edited && menuBadgeLabel ? '<span class="badge">' + menuBadgeLabel + '</span>' : '') +
+      (r.excludedByHours ? '<span class="badge">13시 이후 오픈' + (r.openHours && r.openHours.startEndDesc ? ' · ' + r.openHours.startEndDesc : '') + '</span>' : '');
     top.appendChild(el('div','r-row-name', r.name + badges));
     top.appendChild(el('div','r-row-dist', (r.distanceM!=null? r.distanceM+'m':'')));
     row.appendChild(top);
@@ -1250,7 +1321,7 @@
         var patch = { manualOverride: o[2] };
         var saved = saveOverride(r.id, patch);
         r.manualOverride = saved.manualOverride;
-        r.isIncluded = r.manualOverride === null ? r.includedByGeometry : r.manualOverride;
+        r.isIncluded = r.manualOverride === null ? (r.includedByGeometry && !r.excludedByHours) : r.manualOverride;
         renderList(); updateCtaState();
       });
       sideToggle.appendChild(b);
@@ -1795,6 +1866,7 @@
   // ============ 부트스트랩 ============
   function init(){
     state.recentIds = [];
+    state.skippedRestaurantIds = [];
     loadKakaoSdk()
       .then(kakaoReady)
       .then(fetchLiveRestaurants)
@@ -1818,8 +1890,10 @@
   document.addEventListener('DOMContentLoaded', function(){
     $('recommendBtn').addEventListener('click', onRecommend);
     $('rerollBtn').addEventListener('click', onRecommend);
+    $('skipRestaurantBtn').addEventListener('click', onSkipRestaurant);
     $('resetFilters').addEventListener('click', function(){
       state.selected = { type:[], taste:[], cuisine:[] };
+      state.skippedRestaurantIds = [];
       renderChips(); updateCtaState();
     });
     $('researchBtn').addEventListener('click', init);
