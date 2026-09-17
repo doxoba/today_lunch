@@ -1293,9 +1293,15 @@
     var pool = candidatePairs();
     if(pool.length === 0) return null;
     var notSkipped = pool.filter(function(p){ return state.skippedRestaurantIds.indexOf(p.restaurant.id) === -1; });
-    // 넘긴 식당을 빼고 나니 후보가 하나도 안 남으면(예: 후보 식당이 원래 1~2곳뿐이었던 경우),
-    // 계속 결과 없음으로 막히는 것보다는 넘긴 목록을 비우고 처음부터 다시 고르는 게 낫다.
-    if(notSkipped.length === 0) state.skippedRestaurantIds = [];
+    // 넘긴 식당을 빼고 나니 후보가 하나도 안 남으면(예: 반경/조건상 후보가 적어서 다 넘겨버린
+    // 경우), 넘긴 목록을 통째로 비우면 방금 "넘기기"를 누른 식당까지 곧바로 다시 나올 수 있다
+    // (실사용 중 발견된 문제 — 예: 넘긴 지 한두 번 만에 같은 식당이 또 나옴). 그래서 한 번에
+    // 전부 지우는 대신, 가장 먼저 넘겼던 식당부터 하나씩만 풀어준다 — 최근에 넘긴 식당일수록
+    // 더 늦게 돌아오는 순서가 되어 "방금 넘겼는데 바로 또 나온다"는 일이 없다.
+    while(notSkipped.length === 0 && state.skippedRestaurantIds.length > 0){
+      state.skippedRestaurantIds.shift();
+      notSkipped = pool.filter(function(p){ return state.skippedRestaurantIds.indexOf(p.restaurant.id) === -1; });
+    }
     var usable = notSkipped.length > 0 ? notSkipped : pool;
     var fresh = usable.filter(function(p){ return state.recentIds.indexOf(pairKey(p)) === -1; });
     var from = fresh.length > 0 ? fresh : usable;
