@@ -72,6 +72,12 @@ export default {
     if (url.pathname === '/room/update' && request.method === 'POST') return handleUpdateMember(request, env);
     if (url.pathname === '/room/result' && request.method === 'POST') return handleSetResult(request, env);
 
+    // 가게별 댓글(사진+텍스트) 등록/조회/삭제 (Cloudflare KV, REVIEWS 바인딩 필요). 팀 모드와
+    // 달리 개인 기록이라 TTL 없이 영구 보관한다.
+    if (url.pathname === '/review/add' && request.method === 'POST') return handleAddReview(request, env);
+    if (url.pathname === '/review/list' && request.method === 'GET') return handleListReviews(url, env);
+    if (url.pathname === '/review/delete' && request.method === 'POST') return handleDeleteReview(request, env);
+
     // 네이버 플레이스 메뉴 조회. 네이버 지역검색 API는 place id를 안 주기 때문에(공식 API의
     // 근본적 한계로 확인됨) 자동 매칭은 포기하고, 사용자가 앱에서 직접 입력해둔 네이버 place id로만
     // 호출한다. place.naver.com/restaurant/{id}/menu/list 페이지는 SSR이라 카카오처럼 CORS로
@@ -287,6 +293,90 @@ async function handleSetResult(request, env) {
   if (!meta) return json({ error: '방을 찾을 수 없습니다.' }, 404);
   meta.result = body.result || null;
   await saveMeta(env, meta);
+  return json({ ok: true });
+}
+
+// ============ 가게별 댓글(사진+텍스트) (Cloudflare KV) ============
+// Worker Settings > Bindings에서 KV Namespace를 만들어 변수명 REVIEWS로 바인딩해야 동작한다.
+// 팀 모드(ROOMS)와 달리 개인 식사 기록이라 만료(expirationTtl) 없이 영구 보관한다.
+//
+// 키 스킴은 팀 모드와 동일한 아이디어(가게 하나에 여러 댓글이 달릴 수 있으므로, 가게마다
+// 별도 prefix 아래 댓글별로 키를 쪼갠다): review:{placeId}:{timestamp}-{random}
+const REVIEW_MAX_BODY_BYTES = 3 * 1024 * 1024; // ~3MB — 휴대폰에서 리사이즈된 사진(대략 150~400KB) 대비 넉넉한 상한
+const REVIEW_PHOTO_DATA_URL_RE = /^data:image\/(jpeg|png|webp);base64,/;
+
+function reviewKey(placeId, id) { return 'review:' + placeId + ':' + id; }
+function reviewPrefix(placeId) { return 'review:' + placeId + ':'; }
+function newReviewId() {
+  return Date.now() + '-' + crypto.randomUUID().slice(0, 8);
+}
+
+async function handleAddReview(request, env) {
+  if (!env.REVIEWS) return json({ error: 'REVIEWS KV 바인딩이 설정되지 않았습니다. Worker Settings에서 추가해주세요.' }, 500);
+
+  const contentLength = Number(request.headers.get('content-length') || 0);
+  if (contentLength && contentLength > REVIEW_MAX_BODY_BYTES) {
+    return json({ error: '사진이 너무 커요 (최대 3MB).' }, 413);
+  }
+
+  const body = await request.json().catch(() => null);
+  if (!body || !body.placeId) {
+    return json({ error: '잘못된 요청입니다 (placeId 필요).' }, 400);
+  }
+
+  // 사진은 선택 항목 — 텍스트 댓글만 남기는 것도 허용한다. 다만 사진/텍스트가 둘 다 없는
+  // 완전히 빈 등록은 막는다.
+  const review = typeof body.review === 'string' ? body.review.trim().slice(0, 300) : '';
+  let photo = null;
+  if (body.photo != null) {
+    if (typeof body.photo !== 'string' || !REVIEW_PHOTO_DATA_URL_RE.test(body.photo)) {
+      return json({ error: '지원하지 않는 이미지 형식입니다.' }, 400);
+    }
+    if (body.photo.length > REVIEW_MAX_BODY_BYTES) {
+      return json({ error: '사진이 너무 커요 (최대 3MB).' }, 413);
+    }
+    photo = body.photo;
+  }
+  if (!photo && !review) {
+    return json({ error: '사진 또는 댓글 중 하나는 입력해야 합니다.' }, 400);
+  }
+
+  const id = newReviewId();
+  const record = {
+    id,
+    placeId: String(body.placeId),
+    name: typeof body.name === 'string' ? body.name.slice(0, 100) : '',
+    review,
+    photo,
+    createdAt: Date.now(),
+  };
+  await env.REVIEWS.put(reviewKey(record.placeId, id), JSON.stringify(record));
+  return json({ ok: true, id });
+}
+
+async function handleListReviews(url, env) {
+  if (!env.REVIEWS) return json({ error: 'REVIEWS KV 바인딩이 설정되지 않았습니다.' }, 500);
+  const placeId = (url.searchParams.get('placeId') || '').trim();
+  if (!placeId) return json({ error: 'placeId 쿼리 파라미터가 필요합니다.' }, 400);
+
+  // KV list()는 기본적으로 한 번에 최대 1000개 키까지만 반환한다(개인용 앱에서 가게 하나에
+  // 댓글이 그만큼 쌓일 일은 없어서 페이지네이션은 생략).
+  const listed = await env.REVIEWS.list({ prefix: reviewPrefix(placeId) });
+  const reviews = await Promise.all(
+    listed.keys.map((k) => env.REVIEWS.get(k.name).then((raw) => (raw ? JSON.parse(raw) : null)))
+  );
+  return json(
+    { placeId, reviews: reviews.filter(Boolean).sort((a, b) => b.createdAt - a.createdAt) },
+    200,
+    { 'Cache-Control': 'no-store' }
+  );
+}
+
+async function handleDeleteReview(request, env) {
+  if (!env.REVIEWS) return json({ error: 'REVIEWS KV 바인딩이 설정되지 않았습니다.' }, 500);
+  const body = await request.json().catch(() => null);
+  if (!body || !body.placeId || !body.id) return json({ error: '잘못된 요청입니다.' }, 400);
+  await env.REVIEWS.delete(reviewKey(String(body.placeId), String(body.id)));
   return json({ ok: true });
 }
 

@@ -5,6 +5,7 @@
 <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css">
 <link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/regular/style.css">
 <link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/fill/style.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
 
   :root{
@@ -289,6 +290,34 @@
   .modal-error{font-size:12px; color:#b3261e; margin:8px 0 0;}
   .modal-actions{display:flex; gap:8px; margin-top:16px;}
   .modal-actions .btn{flex:1;}
+  .qr-wrap{display:flex; justify-content:center; margin:14px 0;}
+
+  /* ---- 가게별 댓글(사진+텍스트) ---- */
+  .r-row-actions{display:flex; gap:12px; margin-top:6px;}
+  .review-panel{display:none; margin-top:8px; border-top:1px dashed var(--border); padding-top:8px;}
+  .review-panel.open{display:block;}
+  .review-item{display:flex; gap:10px; padding:8px 0; border-bottom:1px solid var(--border-soft);}
+  .review-item:last-child{border-bottom:none;}
+  .review-thumb{width:56px; height:56px; object-fit:cover; border-radius:var(--r-sm); flex:none; background:var(--surface);}
+  .review-meta{flex:1; min-width:0;}
+  .review-date{font-size:11px; color:var(--text-faint);}
+  .review-text{font-size:13px; color:var(--text-body); margin-top:2px; white-space:pre-wrap; word-break:break-word;}
+  .review-item .btn-sm{
+    margin-top:4px; padding:3px 8px; font-size:11px; border-radius:var(--r-sm); flex:none;
+  }
+
+  /* ---- 휴대폰 댓글 업로드 모드 (?mode=review) ---- */
+  body.upload-mode .team-panel, body.upload-mode .page-header, body.upload-mode .board,
+  body.upload-mode .accordion, body.upload-mode #fallbackBanner{display:none;}
+  #uploadPanel{display:none; padding:20px; margin-bottom:20px;}
+  body.upload-mode #uploadPanel{display:block;}
+  #uploadPreviewImg{max-width:100%; max-height:240px; border-radius:var(--r-md); margin:10px 0;}
+  #uploadPanel textarea{
+    width:100%; margin-top:10px; padding:9px 11px; border:1px solid var(--border); border-radius:var(--r-sm);
+    background:#fff; color:var(--text); font-family:inherit; font-size:14px; min-height:70px; resize:vertical;
+    box-sizing:border-box;
+  }
+  #uploadStatus{margin-top:10px;}
 
 </style>
 </head><body>
@@ -317,6 +346,16 @@
       </div>
       <div class="modal-body" id="modalBody"></div>
     </div>
+  </div>
+
+  <div class="panel" id="uploadPanel">
+    <div class="section-label" id="uploadRestaurantName"></div>
+    <p class="page-sub" style="margin:4px 0 0;">사진과 한줄평 중 하나 이상을 남겨주세요 (둘 다 남겨도 좋아요)</p>
+    <input type="file" id="uploadPhotoInput" accept="image/*" capture="environment">
+    <img id="uploadPreviewImg" alt="미리보기" hidden>
+    <textarea id="uploadReviewText" placeholder="한줄평(선택)" maxlength="300"></textarea>
+    <button class="btn primary" id="uploadSubmitBtn" type="button">등록하기</button>
+    <p class="modal-help" id="uploadStatus"></p>
   </div>
 
   <div id="fallbackBanner" class="banner" hidden>
@@ -432,7 +471,11 @@
     // "우리 오늘 뭐먹지" 팀 모드 API. 같은 Worker에 /room, /room/join 등 경로로 얹혀있다
     // (Cloudflare KV 바인딩(ROOMS)이 Worker에 설정돼 있어야 동작함).
     TEAM_API_BASE: 'https://kakao-menu-proxy.01-06.workers.dev',
-    TEAM_POLL_MS: 4000
+    TEAM_POLL_MS: 4000,
+    // 가게별 댓글(사진+텍스트) 기능. 사진은 휴대폰에서 올리기 전 이 크기/화질로 리사이즈해서
+    // KV 저장 용량과 모바일 데이터 사용량을 줄인다.
+    REVIEW_PHOTO_MAX_DIM: 1280,
+    REVIEW_PHOTO_QUALITY: 0.72
   };
 
   var RADIUS_OPTIONS = [100, 200, 300, 400, 500];
@@ -571,6 +614,13 @@
     if(cls) e.className = cls;
     if(html !== undefined) e.innerHTML = html;
     return e;
+  }
+  // el()이 innerHTML로 박아넣으므로, 카카오/네이버에서 온 상호명이나 사용자가 직접 입력한
+  // 댓글 텍스트처럼 신뢰할 수 없는 문자열은 반드시 이 함수로 이스케이프한 뒤 넣어야 한다.
+  function escapeHtml(s){
+    return String(s == null ? '' : s)
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+      .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
   }
   function storageGet(key, fallback){
     try{
@@ -1328,12 +1378,35 @@
     });
     row.appendChild(sideToggle);
 
+    var actions = el('div','r-row-actions');
+
     var editToggle = el('button','edit-toggle','정보 편집');
     editToggle.type = 'button';
     var form = buildEditForm(r);
     editToggle.addEventListener('click', function(){ form.classList.toggle('open'); });
-    row.appendChild(editToggle);
+    actions.appendChild(editToggle);
+
+    var reviewBtn = el('button','edit-toggle','댓글 남기기');
+    reviewBtn.type = 'button';
+    reviewBtn.addEventListener('click', function(){ onShowReviewQr(r); });
+    actions.appendChild(reviewBtn);
+
+    var reviewPanel = el('div','review-panel');
+    var reviewsLoaded = false;
+    var reviewToggle = el('button','edit-toggle','댓글 보기');
+    reviewToggle.type = 'button';
+    reviewToggle.addEventListener('click', function(){
+      var open = reviewPanel.classList.toggle('open');
+      if(open && !reviewsLoaded){
+        reviewsLoaded = true;
+        loadReviewsIntoPanel(r.id, reviewPanel);
+      }
+    });
+    actions.appendChild(reviewToggle);
+
+    row.appendChild(actions);
     row.appendChild(form);
+    row.appendChild(reviewPanel);
     return row;
   }
   // 메뉴 기준 추천으로 바뀌면서, 형태/맛은 이제 식당 단위가 아니라 메뉴 하나하나가 갖는다.
@@ -1604,6 +1677,68 @@
   function copyToClipboard(text){
     if(navigator.clipboard && navigator.clipboard.writeText){ return navigator.clipboard.writeText(text); }
     return Promise.reject(new Error('clipboard API 미지원'));
+  }
+
+  // ---- 가게별 댓글: QR 생성 (PC) ----
+  function buildReviewUrl(r){
+    var u = new URL(location.href.split('?')[0], location.href);
+    u.searchParams.set('mode','review');
+    u.searchParams.set('placeId', r.id);
+    u.searchParams.set('name', r.name);
+    return u.toString();
+  }
+  function onShowReviewQr(r){
+    var url = buildReviewUrl(r);
+    var body = el('div', null,
+      '<p class="modal-help">휴대폰으로 아래 QR을 스캔하면 이 식당(' + escapeHtml(r.name) + ')에 사진·댓글을 바로 남길 수 있어요.</p>');
+    var qrWrap = el('div','qr-wrap');
+    body.appendChild(qrWrap);
+    body.appendChild(el('p','modal-help', escapeHtml(url)));
+    openModal('댓글 남기기 — ' + r.name, body);
+    new QRCode(qrWrap, { text: url, width: 220, height: 220, correctLevel: QRCode.CorrectLevel.M });
+  }
+
+  // ---- 가게별 댓글: PC에서 목록 보기 ----
+  function loadReviewsIntoPanel(placeId, panel){
+    panel.innerHTML = '';
+    panel.appendChild(el('p','modal-help','불러오는 중…'));
+    teamApi('/review/list?placeId=' + encodeURIComponent(placeId))
+      .then(function(data){
+        panel.innerHTML = '';
+        if(!data.reviews || data.reviews.length === 0){
+          panel.appendChild(el('div','empty-state','아직 남긴 댓글이 없어요.'));
+          return;
+        }
+        data.reviews.forEach(function(rev){ panel.appendChild(buildReviewItem(placeId, rev)); });
+      })
+      .catch(function(err){
+        panel.innerHTML = '';
+        panel.appendChild(el('p','modal-error','댓글을 불러오지 못했어요: ' + err.message));
+      });
+  }
+  function buildReviewItem(placeId, rev){
+    var item = el('div','review-item');
+    if(rev.photo){
+      var img = el('img','review-thumb');
+      img.src = rev.photo; img.alt = '댓글 사진'; img.loading = 'lazy';
+      item.appendChild(img);
+    }
+    var meta = el('div','review-meta');
+    meta.appendChild(el('div','review-date', new Date(rev.createdAt).toLocaleString('ko-KR')));
+    if(rev.review) meta.appendChild(el('div','review-text', escapeHtml(rev.review)));
+    var delBtn = el('button','btn btn-outline btn-sm','삭제');
+    delBtn.type = 'button';
+    delBtn.addEventListener('click', function(){
+      if(!confirm('이 댓글을 삭제할까요?')) return;
+      teamApi('/review/delete', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ placeId: placeId, id: rev.id })
+      }).then(function(){ item.remove(); })
+        .catch(function(err){ alert('삭제 실패: ' + err.message); });
+    });
+    meta.appendChild(delBtn);
+    item.appendChild(meta);
+    return item;
   }
 
   function onTeamInviteClick(){
@@ -1941,7 +2076,85 @@
       });
   }
 
+  // ---- 휴대폰 댓글 업로드 모드 (?mode=review&placeId=...&name=...) ----
+  // QR을 스캔해 이 URL로 들어오면, 검색/추천을 하는 일반 앱은 아예 부팅하지 않고 최소한의
+  // 사진+한줄평 등록 화면만 보여준다.
+  var uploadModeParams = (function(){
+    var sp = new URLSearchParams(location.search);
+    if(sp.get('mode') !== 'review') return null;
+    var placeId = sp.get('placeId');
+    if(!placeId) return null;
+    return { placeId: placeId, name: sp.get('name') || '(이름 없음)' };
+  })();
+
+  function resizeImageFile(file, maxDim, quality){
+    return new Promise(function(resolve, reject){
+      var img = new Image();
+      var objectUrl = URL.createObjectURL(file);
+      img.onload = function(){
+        URL.revokeObjectURL(objectUrl);
+        var w = img.naturalWidth, h = img.naturalHeight;
+        var scale = Math.min(1, maxDim / Math.max(w, h)); // 원본보다 키우지는 않음
+        var outW = Math.round(w * scale), outH = Math.round(h * scale);
+        var canvas = document.createElement('canvas');
+        canvas.width = outW; canvas.height = outH;
+        canvas.getContext('2d').drawImage(img, 0, 0, outW, outH);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      };
+      img.onerror = function(){ URL.revokeObjectURL(objectUrl); reject(new Error('이미지를 읽을 수 없어요.')); };
+      img.src = objectUrl;
+    });
+  }
+
+  function initUploadMode(params){
+    document.title = params.name + ' 댓글 남기기';
+    document.body.classList.add('upload-mode');
+    $('uploadRestaurantName').textContent = params.name;
+
+    var fileInput = $('uploadPhotoInput');
+    var previewImg = $('uploadPreviewImg');
+    fileInput.addEventListener('change', function(){
+      var file = fileInput.files[0];
+      if(!file){ previewImg.hidden = true; previewImg.src = ''; return; }
+      var url = URL.createObjectURL(file);
+      previewImg.src = url; previewImg.hidden = false;
+    });
+
+    var submitBtn = $('uploadSubmitBtn');
+    var statusEl = $('uploadStatus');
+    submitBtn.addEventListener('click', function(){ onUploadSubmit(params, submitBtn, statusEl); });
+  }
+
+  function onUploadSubmit(params, submitBtn, statusEl){
+    var file = $('uploadPhotoInput').files[0];
+    var reviewText = $('uploadReviewText').value.trim().slice(0, 300);
+    if(!file && !reviewText){
+      statusEl.textContent = '사진이나 댓글 중 하나는 입력해주세요.';
+      return;
+    }
+    submitBtn.disabled = true;
+    statusEl.textContent = '등록 중…';
+
+    (file ? resizeImageFile(file, CONFIG.REVIEW_PHOTO_MAX_DIM, CONFIG.REVIEW_PHOTO_QUALITY) : Promise.resolve(null))
+      .then(function(photoDataUrl){
+        return teamApi('/review/add', {
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ placeId: params.placeId, name: params.name, photo: photoDataUrl, review: reviewText })
+        });
+      })
+      .then(function(){
+        statusEl.textContent = '등록됐어요! 다른 사진/댓글을 더 추가할 수 있어요.';
+        $('uploadPhotoInput').value = '';
+        $('uploadReviewText').value = '';
+        $('uploadPreviewImg').hidden = true;
+      })
+      .catch(function(err){ statusEl.textContent = '등록 실패: ' + err.message; })
+      .finally(function(){ submitBtn.disabled = false; });
+  }
+
   document.addEventListener('DOMContentLoaded', function(){
+    if(uploadModeParams){ initUploadMode(uploadModeParams); return; }
+
     $('recommendBtn').addEventListener('click', onRecommend);
     $('rerollBtn').addEventListener('click', onRecommend);
     $('skipRestaurantBtn').addEventListener('click', onSkipRestaurant);
