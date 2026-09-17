@@ -1581,6 +1581,7 @@
     code: null, memberId: null, memberName: null, isHost: false,
     members: [], result: null,
     myExcluded: { type:[], taste:[], cuisine:[] }, // 아직 서버에 제출 안 한, 편집 중인 내 조건
+    myRadius: CONFIG.DEFAULT_RADIUS_M, // 마찬가지로 아직 제출 안 한, 편집 중인 내 반경
     pollTimer: null
   };
 
@@ -1662,6 +1663,9 @@
   function enterTeamRoom(code, memberId, name, isHost){
     teamState.code = code; teamState.memberId = memberId; teamState.memberName = name; teamState.isHost = isHost;
     teamState.myExcluded = { type:[], taste:[], cuisine:[] };
+    // 팀 반경도 하나의 조건값이지만, 아예 처음부터 고르게 하기보단 이미 개인 모드에서 골라둔
+    // 반경(state.radiusM)을 기본값으로 깔아준다 — 어차피 취향이 같은 사람일 확률이 높음.
+    teamState.myRadius = state.radiusM || CONFIG.DEFAULT_RADIUS_M;
     storageSet('team', { code:code, memberId:memberId, memberName:name, isHost:isHost });
     $('teamActionsInit').hidden = true;
     $('teamRoomBody').hidden = false;
@@ -1671,7 +1675,7 @@
   }
   function leaveTeamRoom(){
     if(teamState.pollTimer){ clearInterval(teamState.pollTimer); teamState.pollTimer = null; }
-    teamState = { code:null, memberId:null, memberName:null, isHost:false, members:[], result:null, myExcluded:{type:[],taste:[],cuisine:[]}, pollTimer:null };
+    teamState = { code:null, memberId:null, memberName:null, isHost:false, members:[], result:null, myExcluded:{type:[],taste:[],cuisine:[]}, myRadius:CONFIG.DEFAULT_RADIUS_M, pollTimer:null };
     storageSet('team', null);
     $('teamActionsInit').hidden = false;
     $('teamRoomBody').hidden = true;
@@ -1703,11 +1707,17 @@
     var allowedCuisine = CUISINE_OPTIONS.filter(function(t){ return excluded.cuisine.indexOf(t)===-1; });
     return allowedCuisine.indexOf(r.cuisine)!==-1;
   }
+  // 반경은 제외 목록이 아니라 멤버 각자의 "여기까지만" 상한선이다. m.radius가 없는(옛 세션 등)
+  // 멤버는 제약을 안 거는 걸로 취급한다.
+  function restaurantMatchesMemberRadius(r, member){
+    return member.radius == null || r.distanceM == null || r.distanceM <= member.radius;
+  }
   function teamCandidatePairs(members){
     var pairs = [];
     state.restaurants.forEach(function(r){
       if(!r.isIncluded) return;
       if(!members.every(function(m){ return restaurantMatchesMemberCuisine(r, m.excluded); })) return;
+      if(!members.every(function(m){ return restaurantMatchesMemberRadius(r, m); })) return;
       (r.menuItems||[]).forEach(function(menu){
         if(members.every(function(m){ return menuMatchesMemberFilter(menu, m.excluded); })){
           pairs.push({ restaurant:r, menu:menu });
@@ -1738,6 +1748,22 @@
       chip.addEventListener('click', function(){
         var idx = teamState.myExcluded[group].indexOf(opt);
         if(idx===-1) teamState.myExcluded[group].push(opt); else teamState.myExcluded[group].splice(idx,1);
+        renderTeamRoom();
+      });
+      wrap.appendChild(chip);
+    });
+    return wrap;
+  }
+  // 형태/맛/종류는 "제외 목록"(기본 전체 허용)이지만, 반경은 개인 모드와 동일하게 단일 선택
+  // 상한선이라 별도 렌더 함수로 둔다.
+  function renderTeamRadiusChips(){
+    var wrap = el('div','chips');
+    RADIUS_OPTIONS.forEach(function(opt){
+      var chip = el('button','chip'+(teamState.myRadius===opt?' active':''), opt+'m');
+      chip.type='button';
+      chip.addEventListener('click', function(){
+        if(teamState.myRadius === opt) return;
+        teamState.myRadius = opt;
         renderTeamRoom();
       });
       wrap.appendChild(chip);
@@ -1792,12 +1818,16 @@
     var memberList = el('div','team-members');
     teamState.members.forEach(function(m){
       var row = el('div','team-member-row');
-      row.appendChild(el('span', null, m.name + (m.id===teamState.memberId ? ' (나)' : '')));
+      var radiusLabel = m.ready && m.radius != null ? (' · 반경 ' + m.radius + 'm') : '';
+      row.appendChild(el('span', null, m.name + (m.id===teamState.memberId ? ' (나)' : '') + radiusLabel));
       row.appendChild(el('span','team-member-status ' + (m.ready?'ready':'waiting'), m.ready ? '준비완료' : '대기중'));
       memberList.appendChild(row);
     });
     wrap.appendChild(memberList);
 
+    wrap.appendChild(el('div','group-label','반경 (내가 이 안에 있는 식당만 원할 때)'));
+    var g0 = el('div','team-condition-group'); g0.appendChild(renderTeamRadiusChips());
+    wrap.appendChild(g0);
     wrap.appendChild(el('div','group-label','형태 (클릭하면 제외돼요, 기본은 전체 허용)'));
     var g1 = el('div','team-condition-group'); g1.appendChild(renderTeamConditionChips('type', TYPE_OPTIONS));
     wrap.appendChild(g1);
@@ -1826,13 +1856,37 @@
   function onTeamReadyClick(){
     teamApi('/room/update', {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ code: teamState.code, memberId: teamState.memberId, excluded: teamState.myExcluded, ready: true })
+      body: JSON.stringify({ code: teamState.code, memberId: teamState.memberId, excluded: teamState.myExcluded, radius: teamState.myRadius, ready: true })
     }).then(pollTeamRoom).catch(function(err){ alert('조건 제출에 실패했어요: ' + err.message); });
+  }
+
+  // 팀 추천 계산은 호스트 브라우저의 state.restaurants(호스트 자신의 반경 검색 결과)를
+  // 그대로 쓴다. 그래서 어떤 멤버가 호스트 개인 반경보다 넓은 반경을 골랐다면, 호스트가 애초에
+  // 그 범위를 검색해두지 않아 후보 자체가 없다(제외 로직과 무관하게 그냥 없음). 그 멤버 조건이
+  // 부당하게 무시되지 않도록, 추천 실행 전 필요하면 호스트의 반경을 멤버 중 최댓값까지 넓혀서
+  // 재검색한다(seed 모드에선 반경 자체가 의미 없으니 건너뜀).
+  function ensureRadiusCoversTeam(members){
+    if(state.mode !== 'live') return Promise.resolve();
+    var maxOption = RADIUS_OPTIONS[RADIUS_OPTIONS.length - 1];
+    var needed = members.reduce(function(max, m){
+      return Math.max(max, m.radius || CONFIG.DEFAULT_RADIUS_M);
+    }, state.radiusM || CONFIG.DEFAULT_RADIUS_M);
+    needed = Math.min(needed, maxOption);
+    if(needed <= state.radiusM) return Promise.resolve();
+    state.radiusM = needed;
+    storageSet('radiusM', needed);
+    updatePageSub();
+    renderRadiusChips();
+    return init();
   }
 
   function onTeamRecommendClick(){
     var members = teamState.members;
     if(!members || members.length === 0) return;
+    ensureRadiusCoversTeam(members).then(function(){ runTeamRecommendation(members); });
+  }
+
+  function runTeamRecommendation(members){
     var picked = pickTeamPool(members);
     var pairs = picked.pairs;
     if(pairs.length === 0){
@@ -1867,7 +1921,7 @@
   function init(){
     state.recentIds = [];
     state.skippedRestaurantIds = [];
-    loadKakaoSdk()
+    return loadKakaoSdk()
       .then(kakaoReady)
       .then(fetchLiveRestaurants)
       .then(function(res){

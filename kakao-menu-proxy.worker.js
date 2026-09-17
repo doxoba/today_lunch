@@ -169,6 +169,7 @@ export default {
 // 쪼개면 서로 다른 키에 쓰는 것이라 이 경쟁 상태가 원천적으로 발생하지 않는다.
 const ROOM_TTL_SECONDS = 6 * 60 * 60;
 const ROOM_CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // 0/O, 1/I/L 등 혼동되는 문자는 제외
+const DEFAULT_TEAM_RADIUS_M = 300; // lunch-recommender.html의 CONFIG.DEFAULT_RADIUS_M과 동일하게 맞춰둠
 
 function generateRoomCode() {
   const arr = new Uint8Array(6);
@@ -219,7 +220,7 @@ async function handleCreateRoom(env) {
   const memberId = crypto.randomUUID();
   const now = Date.now();
   await saveMeta(env, { code, createdAt: now, memberCount: 1, result: null });
-  await saveMember(env, code, { id: memberId, name: '멤버1', joinedAt: now, ready: false, excluded: emptyExcluded() });
+  await saveMember(env, code, { id: memberId, name: '멤버1', joinedAt: now, ready: false, excluded: emptyExcluded(), radius: DEFAULT_TEAM_RADIUS_M });
   return json({ code, memberId, name: '멤버1' });
 }
 
@@ -241,7 +242,7 @@ async function handleJoinRoom(request, env) {
   const name = '멤버' + meta.memberCount;
   const memberId = crypto.randomUUID();
   await saveMeta(env, meta);
-  await saveMember(env, code, { id: memberId, name, joinedAt: Date.now(), ready: false, excluded: emptyExcluded() });
+  await saveMember(env, code, { id: memberId, name, joinedAt: Date.now(), ready: false, excluded: emptyExcluded(), radius: DEFAULT_TEAM_RADIUS_M });
   return json({ code, memberId, name });
 }
 
@@ -265,6 +266,11 @@ async function handleUpdateMember(request, env) {
   if (!member) return json({ error: '방에서 이 멤버를 찾을 수 없습니다.' }, 404);
 
   if (body.excluded) member.excluded = body.excluded;
+  // 100~500 범위의 유한한 양수만 받는다 — 클라이언트 RADIUS_OPTIONS와 정확히 같은 값 집합을
+  // 강제하진 않는다(향후 옵션이 바뀔 수 있어서), 대신 말이 안 되는 값만 걸러낸다.
+  if (typeof body.radius === 'number' && isFinite(body.radius) && body.radius >= 100 && body.radius <= 500) {
+    member.radius = body.radius;
+  }
   if (typeof body.ready === 'boolean') member.ready = body.ready;
   await saveMember(env, code, member);
   return json({ ok: true });
