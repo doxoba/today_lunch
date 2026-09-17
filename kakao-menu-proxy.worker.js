@@ -114,6 +114,15 @@ export default {
       return handleCafeteriaMenu(cafeteriaChannel, env);
     }
 
+    // 카카오톡 채널이 없는(예: 인스타그램에만 올리는) 구내식당용 — 사람이 직접 오늘자 메뉴
+    // 사진을 붙여넣어 등록/조회 (Cloudflare KV, REVIEWS 바인딩 재사용)
+    if (url.pathname === '/cafeteria/manual-upload' && request.method === 'POST') {
+      return handleUploadCafeteriaManualPhoto(request, env);
+    }
+    if (url.pathname === '/cafeteria/manual' && request.method === 'GET') {
+      return handleGetCafeteriaManualPhoto(url, env);
+    }
+
     const placeId = url.searchParams.get('placeId');
 
     if (!placeId || !/^\d+$/.test(placeId)) {
@@ -211,6 +220,13 @@ const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
 function getKstTodayMonthDay() {
   const kst = new Date(Date.now() + KST_OFFSET_MS);
   return { month: kst.getUTCMonth() + 1, day: kst.getUTCDate() };
+}
+// 수동 업로드 사진의 "오늘 것인지" 판단용 — 연도까지 포함해 완전한 날짜 문자열로 비교한다
+// (getKstTodayMonthDay는 월/일만 다뤄서 연말/연초 경계에선 부정확할 수 있음).
+function getKstDateString(ts) {
+  const kst = new Date((ts || Date.now()) + KST_OFFSET_MS);
+  const pad = (n) => String(n).padStart(2, '0');
+  return kst.getUTCFullYear() + '-' + pad(kst.getUTCMonth() + 1) + '-' + pad(kst.getUTCDate());
 }
 
 // 요일 텍스트("목요일")는 검증하지 않는다 — 요구되는 조건은 "날짜 일치 + 최신순" 두 가지뿐이라
@@ -608,6 +624,61 @@ async function handleDeleteReview(request, env) {
   if (!body || !body.placeId || !body.id) return json({ error: '잘못된 요청입니다.' }, 400);
   await env.REVIEWS.delete(reviewKey(String(body.placeId), String(body.id)));
   return json({ ok: true });
+}
+
+// ============ 채널이 없는 구내식당(예: 인스타그램에만 올리는 곳)용 수동 메뉴 사진 ============
+// 카카오톡 채널/공개 API가 없는 식당은 자동 수집이 불가능해서, 사람이 그날 아침 사진 하나를
+// 직접 붙여넣어 등록한다. 식당(placeId)당 항상 "가장 최근에 올린 사진 하나"만 의미가 있어서
+// review:처럼 여러 개를 쌓아두지 않고 매번 덮어쓴다. date는 KST 기준으로 저장해두고, 조회
+// 시점에 오늘 날짜와 다르면 "없음"으로 취급한다 — 사용자가 깜빡하고 안 올린 날 어제 사진이
+// 오늘자인 것처럼 잘못 표시되는 걸 막기 위함(수동 등록은 자동추정과 달리 애매하게 보여주는
+// 것보다 아예 안 보여주는 쪽이 낫다 — 사람이 매일 직접 확인해서 올리는 기능이라서).
+function cafeteriaManualKey(placeId) { return 'cafeteria-manual:' + placeId; }
+
+async function handleUploadCafeteriaManualPhoto(request, env) {
+  if (!env.REVIEWS) return json({ error: 'REVIEWS KV 바인딩이 설정되지 않았습니다.' }, 500);
+
+  const contentLength = Number(request.headers.get('content-length') || 0);
+  if (contentLength && contentLength > REVIEW_MAX_BODY_BYTES) {
+    return json({ error: '사진이 너무 커요 (최대 3MB).' }, 413);
+  }
+
+  const body = await request.json().catch(() => null);
+  if (!body || !body.placeId) {
+    return json({ error: '잘못된 요청입니다 (placeId 필요).' }, 400);
+  }
+  if (typeof body.photo !== 'string' || !REVIEW_PHOTO_DATA_URL_RE.test(body.photo)) {
+    return json({ error: '지원하지 않는 이미지 형식입니다.' }, 400);
+  }
+  if (body.photo.length > REVIEW_MAX_BODY_BYTES) {
+    return json({ error: '사진이 너무 커요 (최대 3MB).' }, 413);
+  }
+
+  const record = {
+    placeId: String(body.placeId),
+    photo: body.photo,
+    date: getKstDateString(),
+    uploadedAt: Date.now(),
+  };
+  await env.REVIEWS.put(cafeteriaManualKey(record.placeId), JSON.stringify(record));
+  return json({ ok: true, date: record.date });
+}
+
+async function handleGetCafeteriaManualPhoto(url, env) {
+  if (!env.REVIEWS) return json({ error: 'REVIEWS KV 바인딩이 설정되지 않았습니다.' }, 500);
+  const placeId = (url.searchParams.get('placeId') || '').trim();
+  if (!placeId) return json({ error: 'placeId 쿼리 파라미터가 필요합니다.' }, 400);
+
+  const raw = await env.REVIEWS.get(cafeteriaManualKey(placeId));
+  const record = raw ? JSON.parse(raw) : null;
+  if (!record || record.date !== getKstDateString()) {
+    return json({ found: false }, 200, { 'Cache-Control': 'no-store' });
+  }
+  return json(
+    { found: true, imageUrl: record.photo, source: 'manual', uploadedAt: record.uploadedAt },
+    200,
+    { 'Cache-Control': 'no-store' }
+  );
 }
 
 // 네이버 place 메뉴 페이지(SSR)를 가져와 __APOLLO_STATE__에서 Menu 타입 항목만 추출한다.

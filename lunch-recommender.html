@@ -240,6 +240,13 @@
     background:#fff4f2; border:1px solid #f3c7bd; color:#8a3520; border-radius:var(--r-sm);
     padding:8px 10px; font-size:11px; line-height:1.6; margin-bottom:10px;
   }
+  .cafeteria-paste-zone{
+    border:1px dashed var(--border); border-radius:var(--r-sm); background:#fff;
+    color:var(--text-faint); font-size:12px; text-align:center; padding:14px 10px;
+    cursor:text; margin-bottom:4px;
+  }
+  .cafeteria-paste-zone:focus{outline:2px solid var(--accent); outline-offset:1px;}
+  .cafeteria-paste-status{font-size:11px; color:var(--text-faint); margin-bottom:10px; min-height:14px;}
 
   /* ---- 우리 오늘 뭐먹지 (팀 모드) ---- */
   .team-panel{padding:20px; margin-bottom:20px;}
@@ -839,6 +846,10 @@
       // 다시 가져온다(오늘자 메뉴가 바뀌었을 수 있어서) — enrichMenus가 raw를 직접 mutate해둔
       // 값을 여기서는 그대로 넘겨받기만 한다.
       cafeteriaChannelId: saved.cafeteriaChannelId || null,
+      // 카카오톡 채널이 없는 식당(인스타그램에만 올리는 등)은 채널ID 대신 사람이 직접 붙여넣은
+      // 사진으로 대신한다. 한 번이라도 올린 적 있으면 이 플래그를 세워서, 재검색 때마다
+      // enrichMenus가 "오늘자로 새로 올라온 사진이 있는지" 계속 확인하게 한다.
+      cafeteriaManualEnabled: !!saved.cafeteriaManualEnabled,
       cafeteriaMenuImage: raw.cafeteriaMenuImage || null,
       edited: !!saved.edited
     };
@@ -1103,7 +1114,9 @@
   // 참고), profileUpdatedAt 기반의 애매한 판단 없이 곧바로 "오늘 것"으로 취급한다.
   function isCafeteriaImageFromToday(cafeteriaMenuImage){
     if(!cafeteriaMenuImage) return false;
-    if(cafeteriaMenuImage.source === 'post') return true;
+    // 'post'(채널 소식 제목의 날짜가 오늘과 일치)와 'manual'(Worker가 오늘 날짜인 것만
+    // found:true로 내려줌)은 둘 다 이미 오늘 것임이 보장돼 있어 애매한 판단이 필요 없다.
+    if(cafeteriaMenuImage.source === 'post' || cafeteriaMenuImage.source === 'manual') return true;
     if(!cafeteriaMenuImage.profileUpdatedAt) return false;
     var updated = new Date(cafeteriaMenuImage.profileUpdatedAt);
     var now = new Date();
@@ -1111,6 +1124,9 @@
   }
   function cafeteriaImageNote(cafeteriaMenuImage){
     if(!cafeteriaMenuImage) return '';
+    if(cafeteriaMenuImage.source === 'manual'){
+      return '✅ 오늘 직접 올린 사진이에요.';
+    }
     if(cafeteriaMenuImage.source === 'post'){
       return '✅ "' + cafeteriaMenuImage.postTitle + '" 소식에서 오늘자 메뉴를 찾았어요.';
     }
@@ -1150,6 +1166,24 @@
     }).catch(function(err){
       console.warn('[lunch-recommender] 구내식당 메뉴 사진 조회 실패 (channel=' + channelId + '):', err && err.message);
       return undefined; // null(없음)과 달리 캐싱하지 않아 다음에 다시 시도되게 함
+    });
+  }
+  // 카카오톡 채널이 없는(인스타그램에만 올리는 등) 구내식당은 사람이 직접 오늘자 사진을 붙여넣어
+  // 등록한다(정보 편집 패널의 "오늘의 메뉴 사진 붙여넣기" 참고). Worker가 오늘(KST) 날짜인
+  // 것만 골라 내려주므로, 여기선 로컬 캐시 없이 매번 가볍게(REVIEWS KV 조회 하나뿐) 확인한다.
+  function fetchCafeteriaManualPhotoFor(placeId){
+    if(!CONFIG.TEAM_API_BASE || !placeId) return Promise.resolve(undefined);
+    return teamApi('/cafeteria/manual?placeId=' + encodeURIComponent(placeId)).then(function(data){
+      return (data && data.found) ? data : null;
+    }).catch(function(err){
+      console.warn('[lunch-recommender] 수동 메뉴 사진 조회 실패 (placeId=' + placeId + '):', err && err.message);
+      return undefined;
+    });
+  }
+  function uploadCafeteriaManualPhoto(placeId, photoDataUrl){
+    return teamApi('/cafeteria/manual-upload', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ placeId: placeId, photo: photoDataUrl })
     });
   }
   function formatMenuItem(it){
@@ -1207,7 +1241,7 @@
   // 없거나 실패하면 카카오 실시간 메뉴로 폴백한다. 배열 원소를 직접 mutate하므로, 끝난 뒤
   // setRestaurants(rawList)를 다시 호출하면 반영된다.
   function enrichMenus(rawList){
-    var queue = rawList.filter(function(r){ return r.kakaoPlaceId != null || r.naverPlaceId || r.cafeteriaChannelId; }).slice();
+    var queue = rawList.filter(function(r){ return r.kakaoPlaceId != null || r.naverPlaceId || r.cafeteriaChannelId || r.cafeteriaManualEnabled; }).slice();
     function worker(){
       var item = queue.shift();
       if(!item) return Promise.resolve();
@@ -1216,8 +1250,13 @@
         : (item.kakaoPlaceId != null ? fetchMenuFor(item.kakaoPlaceId) : Promise.resolve(null));
       // 운영시간은 메뉴 소스(카카오/네이버)와 무관하게 항상 카카오 기준으로 따로 조회한다.
       var hoursTask = item.kakaoPlaceId != null ? fetchOpenHoursFor(item.kakaoPlaceId) : Promise.resolve(undefined);
-      // 구내식당/한식뷔페 메뉴 사진은 채널ID가 수동으로 입력돼 있는 식당만 해당된다.
-      var cafeteriaTask = item.cafeteriaChannelId ? fetchCafeteriaMenuImageFor(item.cafeteriaChannelId) : Promise.resolve(undefined);
+      // 구내식당/한식뷔페 메뉴 사진: 사람이 직접 붙여넣은 오늘자 사진이 있으면(cafeteriaManualEnabled)
+      // 그게 최우선이고, 없으면 카카오톡 채널ID 기반 자동조회 결과를 쓴다.
+      var manualPhotoTask = item.cafeteriaManualEnabled ? fetchCafeteriaManualPhotoFor(item.id) : Promise.resolve(undefined);
+      var channelPhotoTask = item.cafeteriaChannelId ? fetchCafeteriaMenuImageFor(item.cafeteriaChannelId) : Promise.resolve(undefined);
+      var cafeteriaTask = Promise.all([manualPhotoTask, channelPhotoTask]).then(function(r){
+        return r[0] || r[1];
+      });
       return Promise.all([menuTask, hoursTask, cafeteriaTask]).then(function(results){
         var res = results[0], openHours = results[1], cafeteriaImage = results[2];
         if(res){
@@ -1629,6 +1668,17 @@
       cafeteriaPreview.appendChild(img);
     }
     renderCafeteriaPreview();
+    // 채널 자동조회로 사진이 바뀌든, 수동 붙여넣기로 바뀌든 화면 갱신은 항상 똑같다 — 편집
+    // 미리보기/목록/현재 뽑혀있는 추천 결과 카드까지 한 번에 반영.
+    function refreshAfterCafeteriaImageChange(){
+      renderCafeteriaPreview();
+      renderList(); updateCtaState();
+      if(state.currentResultId && state.currentResultId.split('::')[0] === r.id && r.menuItems && r.menuItems.length){
+        var exact = r.menuItems.filter(function(m){ return r.id + '::' + m.name === state.currentResultId; })[0];
+        var menu = exact || r.menuItems.filter(function(m){ return m.isRecommend; })[0] || r.menuItems[0];
+        renderResult({ restaurant: r, menu: menu });
+      }
+    }
 
     cafeteriaSaveBtn.addEventListener('click', function(){
       var m = cafeteriaIdInput.value.match(/(_[A-Za-z0-9_-]+)/);
@@ -1641,17 +1691,45 @@
         cafeteriaSaveBtn.disabled = false; cafeteriaSaveBtn.textContent = '저장 & 조회';
         if(res){
           r.cafeteriaMenuImage = res;
-          renderCafeteriaPreview();
-          renderList(); updateCtaState();
-          if(state.currentResultId && state.currentResultId.split('::')[0] === r.id && r.menuItems && r.menuItems.length){
-            var exact = r.menuItems.filter(function(m){ return r.id + '::' + m.name === state.currentResultId; })[0];
-            var menu = exact || r.menuItems.filter(function(m){ return m.isRecommend; })[0] || r.menuItems[0];
-            renderResult({ restaurant: r, menu: menu });
-          }
+          refreshAfterCafeteriaImageChange();
         } else {
           alert('메뉴 사진을 찾지 못했어요. 채널ID가 맞는지 확인해주세요.');
         }
       });
+    });
+
+    // 카카오톡 채널이 없는 식당(인스타그램에만 올리는 등)용 — 오늘자 메뉴 사진을 캡처해서
+    // 파일 선택 없이 바로 Ctrl+V로 붙여넣으면 등록된다(카카오톡/인스타그램 화면을 캡처한 뒤
+    // 그대로 붙여넣는 흐름을 염두에 둔 UX). 매번 그 식당의 "가장 최근에 올린 사진 하나"로
+    // 덮어쓰고, 조회 시점에 Worker가 오늘(KST) 날짜인지 확인해서 아니면 안 보여준다.
+    form.appendChild(el('label', null, '오늘의 메뉴 사진 (선택 — 카카오톡 채널이 없는 식당은 캡처해서 여기에 Ctrl+V로 붙여넣기)'));
+    var cafeteriaPasteZone = el('div', 'cafeteria-paste-zone', '여기를 클릭하고 Ctrl+V로 사진을 붙여넣으세요');
+    cafeteriaPasteZone.tabIndex = 0;
+    form.appendChild(cafeteriaPasteZone);
+    var cafeteriaPasteStatus = el('div', 'cafeteria-paste-status');
+    form.appendChild(cafeteriaPasteStatus);
+
+    cafeteriaPasteZone.addEventListener('paste', function(e){
+      var items = (e.clipboardData && e.clipboardData.items) || [];
+      var imageItem = null;
+      for(var i=0;i<items.length;i++){
+        if(items[i].type && items[i].type.indexOf('image/') === 0){ imageItem = items[i]; break; }
+      }
+      if(!imageItem) return;
+      e.preventDefault();
+      var file = imageItem.getAsFile();
+      if(!file) return;
+      cafeteriaPasteStatus.textContent = '업로드 중…';
+      resizeImageFile(file, CONFIG.REVIEW_PHOTO_MAX_DIM, CONFIG.REVIEW_PHOTO_QUALITY)
+        .then(function(photoDataUrl){ return uploadCafeteriaManualPhoto(r.id, photoDataUrl).then(function(){ return photoDataUrl; }); })
+        .then(function(photoDataUrl){
+          cafeteriaPasteStatus.textContent = '오늘자 메뉴 사진으로 등록됐어요.';
+          saveOverride(r.id, { cafeteriaManualEnabled: true });
+          r.cafeteriaManualEnabled = true;
+          r.cafeteriaMenuImage = { imageUrl: photoDataUrl, source: 'manual', uploadedAt: Date.now() };
+          refreshAfterCafeteriaImageChange();
+        })
+        .catch(function(err){ cafeteriaPasteStatus.textContent = '업로드 실패: ' + err.message; });
     });
 
     form.appendChild(el('label', null, '메뉴 목록 (메뉴마다 형태/맛을 지정하면 그 조건에서 이 메뉴가 추천돼요)'));
@@ -1820,6 +1898,7 @@
       var merged = byId[raw.id];
       if(merged && merged.naverPlaceId) raw.naverPlaceId = merged.naverPlaceId;
       if(merged && merged.cafeteriaChannelId) raw.cafeteriaChannelId = merged.cafeteriaChannelId;
+      if(merged && merged.cafeteriaManualEnabled) raw.cafeteriaManualEnabled = true;
     });
     var foot = $('lastSearchAt');
     var prevText = foot.textContent;
