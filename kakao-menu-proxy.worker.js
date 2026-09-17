@@ -107,7 +107,7 @@ export default {
     // 구내식당/한식뷔페 "오늘의 메뉴" 이미지 (카카오톡 채널 프로필 사진)
     const cafeteriaChannel = url.searchParams.get('cafeteriaChannel');
     if (cafeteriaChannel) {
-      return handleCafeteriaMenu(cafeteriaChannel);
+      return handleCafeteriaMenu(cafeteriaChannel, env);
     }
 
     const placeId = url.searchParams.get('placeId');
@@ -188,7 +188,7 @@ export default {
   // "0 0 * * *"(UTC 0시 = KST 9시)를 등록해두면 이 함수가 매일 그 시각에 자동 실행된다.
   // 코드만으로는 cron 자체를 등록할 수 없어 대시보드(또는 wrangler.toml) 설정이 별도로 필요함.
   async scheduled(event, env, ctx) {
-    ctx.waitUntil(prefetchCafeteriaMenus());
+    ctx.waitUntil(prefetchCafeteriaMenus(env));
   },
 };
 
@@ -197,10 +197,12 @@ function cafeteriaCacheRequest(channelId) {
   return new Request('https://kakao-menu-proxy.internal/cafeteria-menu?channel=' + encodeURIComponent(channelId));
 }
 
-// 카카오 채널 프로필 응답에서 프로필 사진(오늘의 메뉴로 쓰이는 이미지)과, 그 카드가 마지막으로
-// 갱신된 시각을 뽑아낸다. updated_at은 "프로필 사진이 바뀐 시각"과 정확히 같다는 보장은 없지만
-// (카드 전체 갱신 시각), 호출부가 "이게 정말 오늘자 메뉴가 맞는지" 판단할 수 있는 유일한 신호라
-// 그대로 내려주고 최종 판단은 프론트엔드(사용자)에게 맡긴다.
+// 카카오 채널 프로필 응답에서 프로필 사진(오늘의 메뉴로 쓰이는 이미지)을 뽑아낸다.
+// profileCard.updated_at(카드 자체의 마지막 편집 시각 — 사업자 정보 등도 포함)은 "사진이
+// 실제로 바뀐 시각"과 무관할 수 있다는 걸 실사용 중 확인함(2026-09-17: 사진은 당일 것인데
+// updated_at은 1년 전 날짜를 가리킨 사례). 그래서 이 필드는 참고용으로만 남겨두고, 실제
+// "언제 사진이 바뀌었는지" 판단은 applyCafeteriaChangeTracking()이 profile_image_id 비교로
+// 직접 추적한 값을 쓴다.
 function parseCafeteriaProfile(data, channelId) {
   const profileCard = (data && data.cards || []).find((c) => c && c.type === 'profile');
   const profile = profileCard && profileCard.profile;
@@ -210,9 +212,42 @@ function parseCafeteriaProfile(data, channelId) {
     channelId,
     name: profile.name || null,
     imageUrl: image.xlarge_url,
-    profileUpdatedAt: profileCard.updated_at || null,
+    imageId: profile.profile_image_id || null,
+    kakaoCardUpdatedAt: profileCard.updated_at || null,
     fetchedAt: Date.now(),
   };
+}
+
+// profileCard.updated_at을 못 믿는 대신, 우리가 매번 조회할 때 profile_image_id가 지난번과
+// 같은지 직접 비교해서 "우리가 마지막으로 이 사진이 바뀐 걸 확인한 시각"을 기록해 그 값을
+// profileUpdatedAt으로 돌려준다. 별도 KV 네임스페이스를 새로 만들게 하지 않으려고, 가게 댓글용
+// REVIEWS 바인딩(범용 durable key-value 저장소일 뿐이라 재사용 가능)을 review:와 겹치지 않는
+// 키 prefix로 나눠서 같이 쓴다. REVIEWS 바인딩이 없으면(구버전 배포 등) 추적을 건너뛰고 카카오
+// 원본 필드를 그대로 profileUpdatedAt에 채워 기존 동작으로 폴백한다.
+function cafeteriaTrackKey(channelId) { return 'cafeteria-track:' + channelId; }
+
+async function applyCafeteriaChangeTracking(env, profile) {
+  if (!env.REVIEWS || !profile.imageId) {
+    return Object.assign({}, profile, { profileUpdatedAt: profile.kakaoCardUpdatedAt });
+  }
+
+  const key = cafeteriaTrackKey(profile.channelId);
+  let tracked = null;
+  try {
+    const raw = await env.REVIEWS.get(key);
+    tracked = raw ? JSON.parse(raw) : null;
+  } catch (e) {
+    tracked = null;
+  }
+
+  let firstSeenAt;
+  if (tracked && tracked.imageId === profile.imageId) {
+    firstSeenAt = tracked.firstSeenAt;
+  } else {
+    firstSeenAt = Date.now();
+    await env.REVIEWS.put(key, JSON.stringify({ imageId: profile.imageId, firstSeenAt }));
+  }
+  return Object.assign({}, profile, { profileUpdatedAt: firstSeenAt });
 }
 
 async function fetchCafeteriaProfile(channelId) {
@@ -240,7 +275,7 @@ async function fetchCafeteriaProfile(channelId) {
   return parseCafeteriaProfile(data, channelId);
 }
 
-async function handleCafeteriaMenu(channelId) {
+async function handleCafeteriaMenu(channelId, env) {
   if (!/^_[A-Za-z0-9_-]+$/.test(channelId)) {
     return json({ error: 'channel 파라미터 형식이 올바르지 않습니다 (예: _gdqxdn).' }, 400);
   }
@@ -254,8 +289,9 @@ async function handleCafeteriaMenu(channelId) {
   if (!result) {
     return json({ error: '채널 프로필 이미지를 가져오지 못했습니다.', channelId }, 502);
   }
+  const tracked = await applyCafeteriaChangeTracking(env, result);
 
-  const response = json(result, 200, {
+  const response = json(tracked, 200, {
     'Cache-Control': `public, max-age=${CAFETERIA_IMAGE_CACHE_SECONDS}`,
   });
   await cache.put(cacheKey, response.clone());
@@ -264,13 +300,14 @@ async function handleCafeteriaMenu(channelId) {
 
 // cron(scheduled)이 매일 09:00(KST)에 이 함수를 호출해 CAFETERIA_CHANNELS의 캐시를 미리
 // 데워둔다. 한 채널이 실패해도(폐업/구조변경 등) 나머지는 계속 진행하도록 allSettled를 쓴다.
-async function prefetchCafeteriaMenus() {
+async function prefetchCafeteriaMenus(env) {
   const cache = caches.default;
   await Promise.allSettled(
     CAFETERIA_CHANNELS.map(async (channelId) => {
       const result = await fetchCafeteriaProfile(channelId);
       if (!result) return;
-      const response = json(result, 200, {
+      const tracked = await applyCafeteriaChangeTracking(env, result);
+      const response = json(tracked, 200, {
         'Cache-Control': `public, max-age=${CAFETERIA_IMAGE_CACHE_SECONDS}`,
       });
       await cache.put(cafeteriaCacheRequest(channelId), response);
