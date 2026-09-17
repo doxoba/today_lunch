@@ -23,13 +23,17 @@ const CACHE_SECONDS = 60 * 60 * 24; // 1일 — 같은 식당 반복 조회 시 
 // 문서화 안 된 내부 API라는 점은 panel3(메뉴)와 동일 — 구조가 바뀌면 조용히 실패할 수 있음.
 const KAKAO_CHANNEL_PROFILE_API = 'https://pf.kakao.com/rocket-web/web/v2/profiles/';
 const CAFETERIA_IMAGE_CACHE_SECONDS = 60 * 60 * 3; // 3시간 — cron이 실패해도 하루 안에 몇 번은 스스로 갱신되게
+// 윤스푸드(_aKxdLs) 실측: 포스트가 전날 23:29에 먼저 올라오고 이미지가 확정되는 편집은 다음날
+// 11:15에 일어났다(약 11.75시간 격차). profile 사진 경로(하루 종일 잘 안 바뀜)보다 훨씬 자주
+// 바뀔 수 있는 경로라 캐시를 짧게 잡아, 편집 전 이미지가 오전 내내 캐싱되는 걸 줄인다.
+const CAFETERIA_POST_IMAGE_CACHE_SECONDS = 60 * 60; // 1시간
 
 // 09:00(KST) 스케줄 프리패치 대상. 프론트엔드는 식당마다 이 채널ID를 "정보 편집"에서 직접
 // 입력해두고(네이버 place id와 동일한 수동 매핑 방식 — 자동 매칭 API가 없음), 이 목록은 그중
 // cron이 매일 아침 미리 캐시를 데워둘 채널들이다. 여기 없는 채널도 on-demand 요청 시엔 정상
 // 동작한다(그냥 그날 첫 요청이 카카오를 직접 호출할 뿐). 새 구내식당을 추가하면 이 배열에도
 // 채널ID를 추가해줘야 매일 9시에 미리 데워진다.
-const CAFETERIA_CHANNELS = ['_gdqxdn', '_NHxgEn', '_bXxkxhb'];
+const CAFETERIA_CHANNELS = ['_gdqxdn', '_NHxgEn', '_bXxkxhb', '_aKxdLs'];
 
 function corsHeaders() {
   return {
@@ -197,21 +201,91 @@ function cafeteriaCacheRequest(channelId) {
   return new Request('https://kakao-menu-proxy.internal/cafeteria-menu?channel=' + encodeURIComponent(channelId));
 }
 
-// 카카오 채널 프로필 응답에서 프로필 사진(오늘의 메뉴로 쓰이는 이미지)을 뽑아낸다.
-// profileCard.updated_at(카드 자체의 마지막 편집 시각 — 사업자 정보 등도 포함)은 "사진이
-// 실제로 바뀐 시각"과 무관할 수 있다는 걸 실사용 중 확인함(2026-09-17: 사진은 당일 것인데
-// updated_at은 1년 전 날짜를 가리킨 사례). 그래서 이 필드는 참고용으로만 남겨두고, 실제
-// "언제 사진이 바뀌었는지" 판단은 applyCafeteriaChangeTracking()이 profile_image_id 비교로
-// 직접 추적한 값을 쓴다.
+// ---- 채널 "소식"(포스트)으로 매일 메뉴를 올리는 패턴 ----
+// 씽씽푸드 등은 프로필 사진 자체를 그날 메뉴로 바꾸지만, 윤스푸드(_aKxdLs) 같은 채널은
+// 프로필 사진은 그대로 두고 "9월 17일 목요일 메뉴안내" 식으로 제목을 단 포스트를 매일
+// 올린다(profile API의 cards[].type==='post' 카드 안 posts[]에 이미 들어있음 — 별도 API
+// 호출 불필요, 2026-09-17 curl로 확인). 예전 날짜 포스트도 계속 쌓여있으므로 제목의 날짜가
+// 정확히 오늘(KST)인 것만, 그중에서도 가장 최근에 올라온 것만 골라야 한다.
+const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
+function getKstTodayMonthDay() {
+  const kst = new Date(Date.now() + KST_OFFSET_MS);
+  return { month: kst.getUTCMonth() + 1, day: kst.getUTCDate() };
+}
+
+// 요일 텍스트("목요일")는 검증하지 않는다 — 요구되는 조건은 "날짜 일치 + 최신순" 두 가지뿐이라
+// 요일까지 대조하면 표기 편차에 더 취약해질 뿐 얻는 게 없다.
+function parseCafeteriaPostTitleDate(title) {
+  if (typeof title !== 'string') return null;
+  const m = title.match(/(\d{1,2})\s*월\s*(\d{1,2})\s*일/);
+  return m ? { month: Number(m[1]), day: Number(m[2]) } : null;
+}
+
+// 제목이 오늘 날짜와 일치하는 포스트 중 가장 최근에 "올라온"(published_at 기준 — updated_at
+// 기준으로 하면 오늘 아침에 편집된 옛 포스트가 방금 올라온 진짜 오늘자 포스트를 이길 수 있어
+// 틀린다) 것을 고른다. posts 배열이 최신순으로 온다고 가정하지 않고 매번 filter+sort 한다
+// (pinned된 포스트가 순서를 흔들 수 있어, pinned 여부는 신호로 쓰지 않는다).
+function pickTodayCafeteriaPost(posts, todayMonthDay) {
+  const candidates = (posts || [])
+    .filter((p) => p && p.status === 'published' && !p.is_private && !p.unlisted)
+    .map((p) => ({ post: p, date: parseCafeteriaPostTitleDate(p.title) }))
+    .filter((c) => c.date && c.date.month === todayMonthDay.month && c.date.day === todayMonthDay.day);
+  if (!candidates.length) return null;
+  candidates.sort((a, b) =>
+    (b.post.published_at || b.post.created_at || 0) - (a.post.published_at || a.post.created_at || 0)
+  );
+  return candidates[0].post;
+}
+
+// _aKxdLs의 오늘자 포스트를 직접 열어보니 media[0]만 다른 포맷(.png, 다른 해상도)이고 나머지
+// 6장은 동일 포맷 사진들(매장/음식 스냅샷으로 추정)이라, media[0]이 의도적으로 만든 메뉴판
+// 이미지일 가능성이 높다 — 다만 한 채널·하루치 샘플로 확인한 가정이라 확정적 근거는 아니다.
+// 다른 채널에서 이 가정이 깨지는 게 확인되면 이 함수만 고치면 된다.
+function pickCafeteriaPostMedia(post) {
+  const first = (post && post.media || [])[0];
+  return (first && first.xlarge_url) ? first : null;
+}
+
+// 카카오 채널 프로필 응답에서 오늘의 메뉴 이미지를 뽑아낸다. 포스트형 패턴을 먼저 시도하고
+// (제목에 오늘 날짜가 있는 게 확인되면 신뢰도가 가장 높음), 매칭되는 포스트가 없으면 기존
+// 프로필 사진 경로로 그대로 폴백한다. profileCard.updated_at(카드 자체의 마지막 편집 시각 —
+// 사업자 정보 등도 포함)은 "사진이 실제로 바뀐 시각"과 무관할 수 있다는 걸 실사용 중 확인함
+// (2026-09-17: 사진은 당일 것인데 updated_at은 1년 전 날짜를 가리킨 사례). 그래서 이 필드는
+// 참고용으로만 남겨두고, 실제 "언제 사진이 바뀌었는지" 판단은 applyCafeteriaChangeTracking()이
+// profile_image_id 비교로 직접 추적한 값을 쓴다(포스트 경로는 published_at이 이미 신뢰
+// 가능해서 이 추적이 필요 없다 — 호출부에서 source로 분기).
 function parseCafeteriaProfile(data, channelId) {
-  const profileCard = (data && data.cards || []).find((c) => c && c.type === 'profile');
+  const cards = (data && data.cards) || [];
+  const profileCard = cards.find((c) => c && c.type === 'profile');
   const profile = profileCard && profileCard.profile;
+  const name = (profile && profile.name) || null;
+
+  const postsCard = cards.find((c) => c && c.type === 'post');
+  const matchedPost = pickTodayCafeteriaPost((postsCard && postsCard.posts) || [], getKstTodayMonthDay());
+  if (matchedPost) {
+    const media = pickCafeteriaPostMedia(matchedPost);
+    if (media) {
+      return {
+        channelId,
+        name,
+        imageUrl: media.xlarge_url,
+        source: 'post',
+        postTitle: matchedPost.title,
+        postPublishedAt: matchedPost.published_at || matchedPost.created_at || null,
+        fetchedAt: Date.now(),
+      };
+    }
+    // 매칭은 됐는데 쓸만한 이미지가 없으면(media 비었거나 xlarge_url 없음) 아래 프로필
+    // 사진 경로로 계속 진행한다(throw 없이 "매칭 없음"과 동일하게 취급).
+  }
+
   const image = profile && profile.profile_image;
   if (!image || !image.xlarge_url) return null;
   return {
     channelId,
-    name: profile.name || null,
+    name,
     imageUrl: image.xlarge_url,
+    source: 'profile',
     imageId: profile.profile_image_id || null,
     kakaoCardUpdatedAt: profileCard.updated_at || null,
     fetchedAt: Date.now(),
@@ -289,10 +363,13 @@ async function handleCafeteriaMenu(channelId, env) {
   if (!result) {
     return json({ error: '채널 프로필 이미지를 가져오지 못했습니다.', channelId }, 502);
   }
-  const tracked = await applyCafeteriaChangeTracking(env, result);
+  // 포스트 경로는 published_at이 이미 신뢰 가능한 타임스탬프라 profile_image_id 추적이
+  // 불필요하다(추적은 카카오의 못 믿을 profileCard.updated_at을 보정하기 위한 것뿐).
+  const tracked = result.source === 'post' ? result : await applyCafeteriaChangeTracking(env, result);
+  const maxAge = tracked.source === 'post' ? CAFETERIA_POST_IMAGE_CACHE_SECONDS : CAFETERIA_IMAGE_CACHE_SECONDS;
 
   const response = json(tracked, 200, {
-    'Cache-Control': `public, max-age=${CAFETERIA_IMAGE_CACHE_SECONDS}`,
+    'Cache-Control': `public, max-age=${maxAge}`,
   });
   await cache.put(cacheKey, response.clone());
   return response;
@@ -306,9 +383,10 @@ async function prefetchCafeteriaMenus(env) {
     CAFETERIA_CHANNELS.map(async (channelId) => {
       const result = await fetchCafeteriaProfile(channelId);
       if (!result) return;
-      const tracked = await applyCafeteriaChangeTracking(env, result);
+      const tracked = result.source === 'post' ? result : await applyCafeteriaChangeTracking(env, result);
+      const maxAge = tracked.source === 'post' ? CAFETERIA_POST_IMAGE_CACHE_SECONDS : CAFETERIA_IMAGE_CACHE_SECONDS;
       const response = json(tracked, 200, {
-        'Cache-Control': `public, max-age=${CAFETERIA_IMAGE_CACHE_SECONDS}`,
+        'Cache-Control': `public, max-age=${maxAge}`,
       });
       await cache.put(cafeteriaCacheRequest(channelId), response);
     })
