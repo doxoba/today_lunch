@@ -35,6 +35,26 @@ function json(obj, status = 200, extraHeaders = {}) {
   });
 }
 
+// panel3 응답의 open_hours는 "오늘부터 7일치" 요일별 영업시간을 문자열 설명("09:00 ~ 21:30")
+// 형태로 준다. 점심 추천 앱은 "오늘 몇 시에 여는가"만 필요하므로, 오늘 항목(is_highlight)의
+// 시작 시각만 분 단위로 뽑아 돌려준다. 휴무일 등이라 오늘 항목에 영업시간이 없으면(온라인에서
+// 구조가 바뀌었을 가능성 포함) null을 돌려주고, 호출하는 쪽에서 "판단 불가"로 취급해 필터링하지
+// 않도록 한다(잘못 제외시키는 것보다 안전한 쪽).
+function parseOpenHours(openHours) {
+  if (!openHours) return null;
+  const days = openHours?.week_from_today?.week_periods?.[0]?.days || [];
+  const today = days.find((d) => d.is_highlight) || days[0];
+  const desc = today?.on_days?.start_end_time_desc;
+  if (!desc) return null;
+  const m = desc.match(/(\d{1,2}):(\d{2})/);
+  if (!m) return null;
+  return {
+    startMinutes: Number(m[1]) * 60 + Number(m[2]),
+    startEndDesc: desc,
+    headlineCode: openHours?.headline?.code || null,
+  };
+}
+
 export default {
   async fetch(request, env) {
     if (request.method === 'OPTIONS') {
@@ -126,6 +146,7 @@ export default {
         description: it.ai_mate_desc || null,
         photoUrl: it.photo_url || null,
       })),
+      openHours: parseOpenHours(data?.open_hours),
     };
 
     const response = json(result, 200, {
