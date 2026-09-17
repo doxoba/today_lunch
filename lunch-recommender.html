@@ -247,6 +247,10 @@
   }
   .cafeteria-paste-zone:focus{outline:2px solid var(--accent); outline-offset:1px;}
   .cafeteria-paste-status{font-size:11px; color:var(--text-faint); margin-bottom:10px; min-height:14px;}
+  .cafeteria-weekly-grid{display:flex; flex-wrap:wrap; gap:6px; margin-bottom:4px;}
+  .cafeteria-weekly-slot{flex:1 1 60px; min-width:60px;}
+  .cafeteria-paste-zone.small{padding:10px 4px; font-size:11px; margin-bottom:2px;}
+  .cafeteria-weekly-slot .cafeteria-paste-status{margin-bottom:0; font-size:10px; text-align:center;}
 
   /* ---- 우리 오늘 뭐먹지 (팀 모드) ---- */
   .team-panel{padding:20px; margin-bottom:20px;}
@@ -850,6 +854,10 @@
       // 사진으로 대신한다. 한 번이라도 올린 적 있으면 이 플래그를 세워서, 재검색 때마다
       // enrichMenus가 "오늘자로 새로 올라온 사진이 있는지" 계속 확인하게 한다.
       cafeteriaManualEnabled: !!saved.cafeteriaManualEnabled,
+      // 인스타그램처럼 하루 단위가 아니라 "주간 식단표" 한 장을 요일별로 나눠 붙여넣는
+      // 식당용(정보 편집의 요일별 5칸 참고). cafeteriaManualEnabled와 마찬가지로 한 번이라도
+      // 올린 적 있으면 세워두고, 재검색 때마다 오늘 요일 칸이 채워져 있는지 계속 확인한다.
+      cafeteriaWeeklyEnabled: !!saved.cafeteriaWeeklyEnabled,
       cafeteriaMenuImage: raw.cafeteriaMenuImage || null,
       edited: !!saved.edited
     };
@@ -1114,18 +1122,26 @@
   // 참고), profileUpdatedAt 기반의 애매한 판단 없이 곧바로 "오늘 것"으로 취급한다.
   function isCafeteriaImageFromToday(cafeteriaMenuImage){
     if(!cafeteriaMenuImage) return false;
-    // 'post'(채널 소식 제목의 날짜가 오늘과 일치)와 'manual'(Worker가 오늘 날짜인 것만
-    // found:true로 내려줌)은 둘 다 이미 오늘 것임이 보장돼 있어 애매한 판단이 필요 없다.
-    if(cafeteriaMenuImage.source === 'post' || cafeteriaMenuImage.source === 'manual') return true;
+    // 'post'(채널 소식 제목의 날짜가 오늘과 일치), 'manual'(Worker가 오늘 날짜인 것만
+    // found:true로 내려줌), 'weekly'(Worker가 이번 주 월요일 날짜까지 확인해서 내려줌)는
+    // 셋 다 이미 오늘 것임이 보장돼 있어 애매한 판단이 필요 없다.
+    if(cafeteriaMenuImage.source === 'post' || cafeteriaMenuImage.source === 'manual' || cafeteriaMenuImage.source === 'weekly') return true;
     if(!cafeteriaMenuImage.profileUpdatedAt) return false;
     var updated = new Date(cafeteriaMenuImage.profileUpdatedAt);
     var now = new Date();
     return updated.getFullYear() === now.getFullYear() && updated.getMonth() === now.getMonth() && updated.getDate() === now.getDate();
   }
+  var CAFETERIA_WEEKDAY_KO = { mon:'월', tue:'화', wed:'수', thu:'목', fri:'금' };
+  // buildEditForm의 요일별 5칸 UI가 순서대로 렌더링할 때 쓴다(위 맵과 같은 데이터를
+  // 중복 정의하지 않도록 여기서 파생시킨다).
+  var CAFETERIA_WEEKDAY_LABELS = Object.keys(CAFETERIA_WEEKDAY_KO).map(function(k){ return [k, CAFETERIA_WEEKDAY_KO[k]]; });
   function cafeteriaImageNote(cafeteriaMenuImage){
     if(!cafeteriaMenuImage) return '';
     if(cafeteriaMenuImage.source === 'manual'){
       return '✅ 오늘 직접 올린 사진이에요.';
+    }
+    if(cafeteriaMenuImage.source === 'weekly'){
+      return '✅ 이번 주 식단표에서 ' + (CAFETERIA_WEEKDAY_KO[cafeteriaMenuImage.weekday] || '') + '요일 메뉴를 가져왔어요.';
     }
     if(cafeteriaMenuImage.source === 'post'){
       return '✅ "' + cafeteriaMenuImage.postTitle + '" 소식에서 오늘자 메뉴를 찾았어요.';
@@ -1186,6 +1202,24 @@
       body: JSON.stringify({ placeId: placeId, photo: photoDataUrl })
     });
   }
+  // 인스타그램처럼 하루 단위가 아니라 "주간 식단표" 한 장을 요일별로 나눠 올리는 식당용.
+  // Worker가 오늘(KST) 요일 + 이번 주 월요일 날짜까지 다 확인해서 내려주므로, 여기선 그냥
+  // 결과를 그대로 신뢰한다.
+  function fetchCafeteriaWeeklyPhotoFor(placeId){
+    if(!CONFIG.TEAM_API_BASE || !placeId) return Promise.resolve(undefined);
+    return teamApi('/cafeteria/weekly?placeId=' + encodeURIComponent(placeId)).then(function(data){
+      return (data && data.found) ? data : null;
+    }).catch(function(err){
+      console.warn('[lunch-recommender] 주간 식단표 조회 실패 (placeId=' + placeId + '):', err && err.message);
+      return undefined;
+    });
+  }
+  function uploadCafeteriaWeeklyPhoto(placeId, weekday, photoDataUrl){
+    return teamApi('/cafeteria/weekly-upload', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ placeId: placeId, weekday: weekday, photo: photoDataUrl })
+    });
+  }
   function formatMenuItem(it){
     if(!it) return '';
     // 카카오/네이버 둘 다 가격 미정 메뉴를 -1(또는 0)로 내려주는 경우가 있어, 양수일 때만
@@ -1241,7 +1275,7 @@
   // 없거나 실패하면 카카오 실시간 메뉴로 폴백한다. 배열 원소를 직접 mutate하므로, 끝난 뒤
   // setRestaurants(rawList)를 다시 호출하면 반영된다.
   function enrichMenus(rawList){
-    var queue = rawList.filter(function(r){ return r.kakaoPlaceId != null || r.naverPlaceId || r.cafeteriaChannelId || r.cafeteriaManualEnabled; }).slice();
+    var queue = rawList.filter(function(r){ return r.kakaoPlaceId != null || r.naverPlaceId || r.cafeteriaChannelId || r.cafeteriaManualEnabled || r.cafeteriaWeeklyEnabled; }).slice();
     function worker(){
       var item = queue.shift();
       if(!item) return Promise.resolve();
@@ -1250,12 +1284,14 @@
         : (item.kakaoPlaceId != null ? fetchMenuFor(item.kakaoPlaceId) : Promise.resolve(null));
       // 운영시간은 메뉴 소스(카카오/네이버)와 무관하게 항상 카카오 기준으로 따로 조회한다.
       var hoursTask = item.kakaoPlaceId != null ? fetchOpenHoursFor(item.kakaoPlaceId) : Promise.resolve(undefined);
-      // 구내식당/한식뷔페 메뉴 사진: 사람이 직접 붙여넣은 오늘자 사진이 있으면(cafeteriaManualEnabled)
-      // 그게 최우선이고, 없으면 카카오톡 채널ID 기반 자동조회 결과를 쓴다.
+      // 구내식당/한식뷔페 메뉴 사진: 사람이 오늘 콕 집어 붙여넣은 사진(cafeteriaManualEnabled)이
+      // 최우선, 그다음이 주간 식단표에서 오늘 요일 칸(cafeteriaWeeklyEnabled), 마지막이 카카오톡
+      // 채널ID 기반 자동조회다.
       var manualPhotoTask = item.cafeteriaManualEnabled ? fetchCafeteriaManualPhotoFor(item.id) : Promise.resolve(undefined);
+      var weeklyPhotoTask = item.cafeteriaWeeklyEnabled ? fetchCafeteriaWeeklyPhotoFor(item.id) : Promise.resolve(undefined);
       var channelPhotoTask = item.cafeteriaChannelId ? fetchCafeteriaMenuImageFor(item.cafeteriaChannelId) : Promise.resolve(undefined);
-      var cafeteriaTask = Promise.all([manualPhotoTask, channelPhotoTask]).then(function(r){
-        return r[0] || r[1];
+      var cafeteriaTask = Promise.all([manualPhotoTask, weeklyPhotoTask, channelPhotoTask]).then(function(r){
+        return r[0] || r[1] || r[2];
       });
       return Promise.all([menuTask, hoursTask, cafeteriaTask]).then(function(results){
         var res = results[0], openHours = results[1], cafeteriaImage = results[2];
@@ -1732,6 +1768,51 @@
         .catch(function(err){ cafeteriaPasteStatus.textContent = '업로드 실패: ' + err.message; });
     });
 
+    // 인스타그램처럼 하루 한 장이 아니라 "주간 식단표" 한 장에 월~금 메뉴가 다 들어있는
+    // 식당용 — 그 사진을 요일별로 잘라서 한 주에 한 번만 5칸에 나눠 붙여넣으면, 그 주
+    // 내내 매일 다시 붙여넣지 않아도 자동으로 그날 칸이 뜬다(위 "오늘의 메뉴 사진"과는
+    // 별개 경로 — 둘 다 항상 노출해두고 식당 유형에 맞는 쪽을 쓰면 됨, 토글 아님).
+    form.appendChild(el('label', null, '주간 식단표 (선택 — 한 주치 사진을 요일별로 잘라서 각 칸에 Ctrl+V, 인스타그램처럼 주 단위로만 올리는 식당용)'));
+    var weeklyGrid = el('div', 'cafeteria-weekly-grid');
+    form.appendChild(weeklyGrid);
+    CAFETERIA_WEEKDAY_LABELS.forEach(function(w){
+      var weekday = w[0], label = w[1];
+      var slot = el('div', 'cafeteria-weekly-slot');
+      var zone = el('div', 'cafeteria-paste-zone small', label);
+      zone.tabIndex = 0;
+      var status = el('div', 'cafeteria-paste-status');
+      slot.appendChild(zone);
+      slot.appendChild(status);
+      weeklyGrid.appendChild(slot);
+
+      zone.addEventListener('paste', function(e){
+        var items = (e.clipboardData && e.clipboardData.items) || [];
+        var imageItem = null;
+        for(var i=0;i<items.length;i++){
+          if(items[i].type && items[i].type.indexOf('image/') === 0){ imageItem = items[i]; break; }
+        }
+        if(!imageItem) return;
+        e.preventDefault();
+        var file = imageItem.getAsFile();
+        if(!file) return;
+        status.textContent = '업로드 중…';
+        resizeImageFile(file, CONFIG.REVIEW_PHOTO_MAX_DIM, CONFIG.REVIEW_PHOTO_QUALITY)
+          .then(function(photoDataUrl){ return uploadCafeteriaWeeklyPhoto(r.id, weekday, photoDataUrl); })
+          .then(function(){
+            status.textContent = label + '요일 등록됨';
+            saveOverride(r.id, { cafeteriaWeeklyEnabled: true });
+            r.cafeteriaWeeklyEnabled = true;
+            // 방금 채운 칸이 오늘 요일이면 바로 반영, 아니면(다른 요일 칸이면) 조용히
+            // 넘어간다 — fetchCafeteriaWeeklyPhotoFor가 오늘 요일이 아니면 알아서
+            // found:false를 돌려주므로 잘못 반영될 걱정 없이 항상 호출해도 안전하다.
+            fetchCafeteriaWeeklyPhotoFor(r.id).then(function(res){
+              if(res){ r.cafeteriaMenuImage = res; refreshAfterCafeteriaImageChange(); }
+            });
+          })
+          .catch(function(err){ status.textContent = '업로드 실패: ' + err.message; });
+      });
+    });
+
     form.appendChild(el('label', null, '메뉴 목록 (메뉴마다 형태/맛을 지정하면 그 조건에서 이 메뉴가 추천돼요)'));
     var menuListWrap = el('div','menu-edit-list');
     form.appendChild(menuListWrap);
@@ -1899,6 +1980,7 @@
       if(merged && merged.naverPlaceId) raw.naverPlaceId = merged.naverPlaceId;
       if(merged && merged.cafeteriaChannelId) raw.cafeteriaChannelId = merged.cafeteriaChannelId;
       if(merged && merged.cafeteriaManualEnabled) raw.cafeteriaManualEnabled = true;
+      if(merged && merged.cafeteriaWeeklyEnabled) raw.cafeteriaWeeklyEnabled = true;
     });
     var foot = $('lastSearchAt');
     var prevText = foot.textContent;
