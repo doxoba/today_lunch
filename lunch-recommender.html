@@ -179,18 +179,19 @@
   /* ---- 식당 목록 행 (JS가 생성) ---- */
   .r-row{background:#fff; border:1px solid var(--border); border-radius:var(--r-md); padding:12px; margin-top:8px;}
   .r-row.excluded{opacity:.55;}
-  .r-row-top{display:flex; justify-content:space-between; align-items:baseline; gap:8px;}
-  .r-row-name{font-weight:600; font-size:13px; color:var(--text);}
+  .r-row-top{display:flex; flex-wrap:wrap; align-items:center; gap:6px;}
+  .r-row-name{flex:1 1 auto; min-width:0; font-weight:600; font-size:13px; color:var(--text);}
   .r-row-dist{font-size:12px; color:var(--text-muted); white-space:nowrap;}
   .r-row-cat{font-size:12px; color:var(--text-muted); margin:2px 0 8px;}
   .badge{
     display:inline-block; font-size:10px; font-weight:600; padding:1px 6px; border-radius:6px;
     background:var(--accent-tint); color:var(--accent-dark); margin-left:6px;
   }
-  .side-toggle{display:flex; gap:4px; margin-bottom:8px;}
+  /* 상점명 옆에 작게 붙는 자동/포함/제외 버튼 — 정보(이름)가 시각적으로 주가 되도록 축소해둔다 */
+  .side-toggle{display:flex; gap:3px; flex:none;}
   .side-toggle button{
-    flex:1; font-size:11px; padding:5px; border-radius:var(--r-sm); border:1px solid var(--border);
-    background:#fff; color:var(--text-body); cursor:pointer;
+    font-size:10px; padding:3px 7px; border-radius:var(--r-sm); border:1px solid var(--border);
+    background:#fff; color:var(--text-body); cursor:pointer; white-space:nowrap;
   }
   .side-toggle button.on{background:var(--accent); color:#fff; border-color:var(--accent);}
   .edit-form{display:none; margin-top:8px; border-top:1px dashed var(--border); padding-top:8px;}
@@ -473,8 +474,9 @@
 
   </div>
 
-  <details class="accordion">
+  <details class="accordion" open>
     <summary>주변 식당 목록 · 정보 편집<i class="ph ph-caret-down" aria-hidden="true"></i></summary>
+    <div class="chips" id="listCategoryChips" style="margin:12px 16px 0;"></div>
     <div class="banner" id="searchIncompleteWarning" hidden style="margin:12px 16px 0;">
       ⚠️ 이 반경은 상점이 워낙 밀집해 있어(카카오 API 45건 제한) 일부가 누락됐을 수 있어요. 반경을 줄이거나, 아래에서 직접 확인해 빠진 식당은 없는지 대조해보세요.
     </div>
@@ -663,7 +665,12 @@
     searchIncomplete: false,
     map: null,
     highlightMarker: null,
-    highlightInfoWindow: null
+    highlightInfoWindow: null,
+    // 자동/포함/제외 공유 상태(Cloudflare KV). init()에서 채워지며, { [placeId]: {manualOverride, updatedAt} }.
+    sharedOverrides: {},
+    // 목록(주변 식당 목록 · 정보 편집) 전용 카테고리 필터. 상단 추천 조건의 "종류" 칩과는
+    // 별개 상태 — 이 목록을 구경/훑어보는 용도라 추천 로직에는 영향을 주지 않는다.
+    listCategoryFilter: 'all'
   };
 
   // ============ utils ============
@@ -798,13 +805,43 @@
     return all[id];
   }
 
+  // ============ 자동/포함/제외(manualOverride) 공유 상태 (Cloudflare KV) ============
+  // 실제로 없어진 상점인데 사장님이 폐업 등록을 안 해 카카오에 계속 남아있는 경우처럼, 한 사람이
+  // "제외"하면 그 정보를 전원이 똑같이 봐야 유용하다. 그래서 이 값만은 localStorage가 아니라
+  // Worker의 공유 저장소(KV)가 정답이고, state.sharedOverrides에 담아 mergeRecord에서 로컬
+  // overrides.manualOverride보다 우선한다(공유 저장소가 아직 모르는 식당만 로컬 값으로 폴백).
+  // 잘못 제외해도 아무나 "자동"/"포함"으로 되돌릴 수 있으므로 접근 권한은 따로 두지 않는다.
+  function fetchSharedOverrides(){
+    if(!CONFIG.TEAM_API_BASE) return Promise.resolve({});
+    return fetch(CONFIG.TEAM_API_BASE + '/overrides').then(function(res){
+      if(!res.ok) throw new Error('overrides fetch failed: ' + res.status);
+      return res.json();
+    }).then(function(data){ return (data && data.overrides) || {}; })
+      .catch(function(err){
+        console.warn('[lunch-recommender] 공유 제외/포함 상태 조회 실패 (로컬 값으로 폴백):', err && err.message);
+        return {};
+      });
+  }
+  function saveSharedOverride(placeId, manualOverride){
+    if(!CONFIG.TEAM_API_BASE) return Promise.resolve();
+    return fetch(CONFIG.TEAM_API_BASE + '/overrides/set', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ placeId: placeId, manualOverride: manualOverride })
+    }).then(function(res){ if(!res.ok) throw new Error('overrides set failed: ' + res.status); });
+  }
+
   function mergeRecord(raw, overrides){
     var saved = overrides[raw.id] || {};
     var includedByGeometry = raw.includedByGeometry !== undefined ? raw.includedByGeometry : true;
     // 운영시간 조회는 메뉴 자동조회와 함께 나중에(enrichAndRefresh) 비동기로 도착하므로, 아직 안
     // 왔으면(raw.openHours === undefined) "판단 불가"로 보고 제외하지 않는다.
     var excludedByHours = isExcludedByLunchHours(raw.openHours);
-    var manualOverride = ('manualOverride' in saved) ? saved.manualOverride : null;
+    // 자동/포함/제외는 공유 저장소(state.sharedOverrides)가 있으면 그 값이 항상 우선이고,
+    // 공유 저장소가 아직 모르는 식당(아무도 안 건드림)에 한해서만 로컬 편집값으로 폴백한다.
+    var sharedOverride = (state.sharedOverrides && state.sharedOverrides[raw.id]) || null;
+    var manualOverride = sharedOverride ? sharedOverride.manualOverride
+      : (('manualOverride' in saved) ? saved.manualOverride : null);
     // 종류 8분류 개편(2026-09-16) 이전에 저장된 편집분은 옛 taxonomy 값('한식' 등)을 그대로
     // 갖고 있을 수 있다. CUISINE_OPTIONS에 없는 값이면 무시하고 다시 추정한다 — 그대로 두면
     // 그 식당이 "종류" 필터의 어떤 칩을 골라도 안 걸리는(=계속 안 보이는) 조용한 문제가 생긴다.
@@ -1457,6 +1494,32 @@
       c.appendChild(chip);
     });
   }
+  // "주변 식당 목록 · 정보 편집" 목록 전용 카테고리 필터. 상단 추천 조건의 "종류" 칩
+  // (chips-cuisine, state.selected.cuisine)과는 별개 상태라 이걸 골라도 "오늘 뭐 먹지?" 추천
+  // 결과에는 영향을 주지 않는다 — 구내식당 메뉴만 궁금한 사람이 이 목록만 훑어보는 용도.
+  function renderListCategoryFilter(){
+    var c = $('listCategoryChips');
+    if(!c) return;
+    c.innerHTML = '';
+    var allChip = el('button', 'chip' + (state.listCategoryFilter === 'all' ? ' active' : ''), '전체');
+    allChip.type = 'button';
+    allChip.addEventListener('click', function(){
+      state.listCategoryFilter = 'all';
+      renderListCategoryFilter();
+      renderList();
+    });
+    c.appendChild(allChip);
+    CUISINE_OPTIONS.forEach(function(opt){
+      var chip = el('button', 'chip' + (state.listCategoryFilter === opt ? ' active' : ''), opt);
+      chip.type = 'button';
+      chip.addEventListener('click', function(){
+        state.listCategoryFilter = opt;
+        renderListCategoryFilter();
+        renderList();
+      });
+      c.appendChild(chip);
+    });
+  }
   function updateCtaState(){
     var pool = candidatePairs();
     var btn = $('recommendBtn'), help = $('ctaHelp');
@@ -1543,7 +1606,13 @@
       body.appendChild(el('div','empty-state','아직 불러온 식당이 없어요.'));
       return;
     }
-    var sorted = state.restaurants.slice().sort(function(a,b){ return (a.distanceM||0)-(b.distanceM||0); });
+    var byCategory = state.listCategoryFilter === 'all' ? state.restaurants
+      : state.restaurants.filter(function(r){ return r.cuisine === state.listCategoryFilter; });
+    if(byCategory.length === 0){
+      body.appendChild(el('div','empty-state','\'' + state.listCategoryFilter + '\' 카테고리에 맞는 식당이 없어요.'));
+      return;
+    }
+    var sorted = byCategory.slice().sort(function(a,b){ return (a.distanceM||0)-(b.distanceM||0); });
     var included = sorted.filter(function(r){ return r.isIncluded; });
     var excluded = sorted.filter(function(r){ return !r.isIncluded; });
 
@@ -1580,6 +1649,33 @@
       (!r.edited && menuBadgeLabel ? '<span class="badge">' + menuBadgeLabel + '</span>' : '') +
       (r.excludedByHours ? '<span class="badge">13시 이후 오픈' + (r.openHours && r.openHours.startEndDesc ? ' · ' + r.openHours.startEndDesc : '') + '</span>' : '');
     top.appendChild(el('div','r-row-name', r.name + badges));
+
+    // 자동/포함/제외는 상점 정보(이름)가 시각적으로 주가 되도록, 별도 줄이 아니라 이름 옆에
+    // 작은 버튼으로 붙인다.
+    var sideToggle = el('div','side-toggle');
+    var opts = [ ['auto','자동',null], ['in','포함',true], ['out','제외',false] ];
+    opts.forEach(function(o){
+      var b = el('button', 'toggle-' + o[0] + (r.manualOverride === o[2] ? ' on' : ''), o[1]);
+      b.type = 'button';
+      b.addEventListener('click', function(){
+        var value = o[2];
+        // 로컬 저장은 오프라인 폴백/이전 버전 호환용으로 계속 남겨두고, 공유 저장소(state.sharedOverrides)를
+        // 진짜 소스로 낙관적 갱신한 뒤 서버(Worker KV)에도 반영해 다른 PC/사용자에게 전파한다.
+        saveOverride(r.id, { manualOverride: value });
+        state.sharedOverrides = state.sharedOverrides || {};
+        if(value === null){ delete state.sharedOverrides[r.id]; }
+        else { state.sharedOverrides[r.id] = { manualOverride: value, updatedAt: Date.now() }; }
+        r.manualOverride = value;
+        r.isIncluded = value === null ? (r.includedByGeometry && !r.excludedByHours) : value;
+        renderList(); updateCtaState();
+        saveSharedOverride(r.id, value).catch(function(err){
+          console.warn('[lunch-recommender] 제외/포함 상태 공유 실패 (내 화면에는 반영됨):', err && err.message);
+        });
+      });
+      sideToggle.appendChild(b);
+    });
+    top.appendChild(sideToggle);
+
     top.appendChild(el('div','r-row-dist', (r.distanceM!=null? r.distanceM+'m':'')));
     row.appendChild(top);
     var catLine = (r.categoryName || '') + ' · 메뉴 ' + (r.menuItems||[]).length + '개';
@@ -1588,27 +1684,11 @@
     if(r.cafeteriaMenuImage){
       var cafeteriaThumb = el('div','r-row-cafeteria');
       var thumbImg = el('img'); thumbImg.src = r.cafeteriaMenuImage.imageUrl; thumbImg.alt = '오늘의 메뉴 사진';
-      thumbImg.addEventListener('click', function(){ window.open(r.cafeteriaMenuImage.imageUrl, '_blank', 'noopener'); });
+      thumbImg.addEventListener('click', function(){ openPhotoLightbox(r.cafeteriaMenuImage.imageUrl); });
       cafeteriaThumb.appendChild(thumbImg);
       cafeteriaThumb.appendChild(el('div','r-row-cafeteria-note', cafeteriaImageNote(r.cafeteriaMenuImage)));
       row.appendChild(cafeteriaThumb);
     }
-
-    var sideToggle = el('div','side-toggle');
-    var opts = [ ['auto','자동',null], ['in','포함',true], ['out','제외',false] ];
-    opts.forEach(function(o){
-      var b = el('button', 'toggle-' + o[0] + (r.manualOverride === o[2] ? ' on' : ''), o[1]);
-      b.type = 'button';
-      b.addEventListener('click', function(){
-        var patch = { manualOverride: o[2] };
-        var saved = saveOverride(r.id, patch);
-        r.manualOverride = saved.manualOverride;
-        r.isIncluded = r.manualOverride === null ? (r.includedByGeometry && !r.excludedByHours) : r.manualOverride;
-        renderList(); updateCtaState();
-      });
-      sideToggle.appendChild(b);
-    });
-    row.appendChild(sideToggle);
 
     var actions = el('div','r-row-actions');
 
@@ -1947,6 +2027,7 @@
   function renderAll(officeCoord){
     updatePageSub();
     renderChips();
+    renderListCategoryFilter();
     updateCtaState();
     renderList();
     if(state.mode === 'live' && officeCoord){
@@ -2436,10 +2517,13 @@
   function init(){
     state.recentIds = [];
     state.skippedRestaurantIds = [];
-    return loadKakaoSdk()
-      .then(kakaoReady)
-      .then(fetchLiveRestaurants)
-      .then(function(res){
+    // 공유 제외/포함 상태 조회는 카카오 검색과 별개 요청이라 병렬로 진행한다(실패해도 빈
+    // 객체로 폴백하므로 카카오 검색 성공/실패 분기와 경쟁 상태 없이 항상 값이 채워진 뒤 merge됨).
+    var overridesPromise = fetchSharedOverrides().then(function(shared){ state.sharedOverrides = shared; });
+    var restaurantsPromise = loadKakaoSdk().then(kakaoReady).then(fetchLiveRestaurants);
+    return Promise.all([overridesPromise, restaurantsPromise])
+      .then(function(results){
+        var res = results[1];
         state.mode = 'live';
         hideFallbackBanner();
         setRestaurants(res.list);

@@ -92,6 +92,12 @@ export default {
     if (url.pathname === '/room/update' && request.method === 'POST') return handleUpdateMember(request, env);
     if (url.pathname === '/room/result' && request.method === 'POST') return handleSetResult(request, env);
 
+    // 가게별 자동/포함/제외(manualOverride) 상태 — 폐업했는데 카카오에 안 지워진 가게처럼
+    // 한 사람이 "제외"하면 전원에게 똑같이 보여야 유용한 판정이라, localStorage 대신 여기
+    // KV(REVIEWS 바인딩 재사용)에 공유 저장한다. 누구나 되돌릴 수 있게 권한 구분은 두지 않는다.
+    if (url.pathname === '/overrides' && request.method === 'GET') return handleListOverrides(env);
+    if (url.pathname === '/overrides/set' && request.method === 'POST') return handleSetOverride(request, env);
+
     // 가게별 댓글(사진+텍스트) 등록/조회/삭제 (Cloudflare KV, REVIEWS 바인딩 필요). 팀 모드와
     // 달리 개인 기록이라 TTL 없이 영구 보관한다.
     if (url.pathname === '/review/add' && request.method === 'POST') return handleAddReview(request, env);
@@ -563,6 +569,49 @@ async function handleSetResult(request, env) {
   if (!meta) return json({ error: '방을 찾을 수 없습니다.' }, 404);
   meta.result = body.result || null;
   await saveMeta(env, meta);
+  return json({ ok: true });
+}
+
+// ============ 가게별 자동/포함/제외(manualOverride) 공유 상태 (Cloudflare KV) ============
+// review:와 같은 REVIEWS KV를 재사용한다(추가 바인딩 불필요). 만료 없이 영구 저장 — 폐업 등
+// 사실 정보라 TTL로 자동 소멸시키면 안 된다. "자동"은 값을 저장하지 않고 키를 지우는 것으로
+// 표현한다(다른 값이 계속 남는 것보다, 전부 지운 상태 = 진짜 아무도 안 건드린 상태와 같아지는
+// 쪽이 더 단순함).
+function overrideKey(placeId) { return 'override:' + placeId; }
+function overridePrefix() { return 'override:'; }
+
+async function handleListOverrides(env) {
+  if (!env.REVIEWS) return json({ error: 'REVIEWS KV 바인딩이 설정되지 않았습니다.' }, 500);
+
+  const listed = await env.REVIEWS.list({ prefix: overridePrefix() });
+  const entries = await Promise.all(
+    listed.keys.map((k) => env.REVIEWS.get(k.name).then((raw) => (raw ? JSON.parse(raw) : null)))
+  );
+  const overrides = {};
+  entries.filter(Boolean).forEach((e) => {
+    overrides[e.placeId] = { manualOverride: e.manualOverride, updatedAt: e.updatedAt };
+  });
+  return json({ overrides }, 200, { 'Cache-Control': 'no-store' });
+}
+
+async function handleSetOverride(request, env) {
+  if (!env.REVIEWS) return json({ error: 'REVIEWS KV 바인딩이 설정되지 않았습니다.' }, 500);
+
+  const body = await request.json().catch(() => null);
+  if (!body || !body.placeId) {
+    return json({ error: '잘못된 요청입니다 (placeId 필요).' }, 400);
+  }
+  const placeId = String(body.placeId);
+
+  if (body.manualOverride === null) {
+    await env.REVIEWS.delete(overrideKey(placeId));
+    return json({ ok: true });
+  }
+  if (typeof body.manualOverride !== 'boolean') {
+    return json({ error: 'manualOverride는 true/false/null 중 하나여야 합니다.' }, 400);
+  }
+  const record = { placeId, manualOverride: body.manualOverride, updatedAt: Date.now() };
+  await env.REVIEWS.put(overrideKey(placeId), JSON.stringify(record));
   return json({ ok: true });
 }
 
