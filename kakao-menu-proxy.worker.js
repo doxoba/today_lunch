@@ -820,14 +820,18 @@ async function handleGetCafeteriaWeeklyPhoto(url, env) {
   );
 }
 
-// 네이버 place 메뉴 페이지(SSR)를 가져와 __APOLLO_STATE__에서 Menu 타입 항목만 추출한다.
+// 네이버 place 메뉴 페이지(SSR)를 가져와 __APOLLO_STATE__에서 메뉴 항목을 추출한다.
+// 캐시 키에 파싱 스키마 버전을 넣어둔다 — 안 넣으면 네이버 페이지 구조가 바뀌어 파싱
+// 로직을 고쳐도, 예전 로직으로 캐싱된 응답(최대 24시간)이 새 코드에 도달하기도 전에
+// 그대로 반환되어 배포해도 안 고쳐진 것처럼 보이는 문제가 생긴다.
+const NAVER_MENU_SCHEMA_VERSION = 'v2';
 async function handleNaverMenu(naverPlaceId) {
   if (!/^\d+$/.test(naverPlaceId)) {
     return json({ error: 'naverPlaceId는 숫자만 가능합니다.' }, 400);
   }
 
   const cache = caches.default;
-  const cacheUrl = 'https://kakao-menu-proxy.internal/naver-menu?id=' + naverPlaceId;
+  const cacheUrl = 'https://kakao-menu-proxy.internal/naver-menu?id=' + naverPlaceId + '&schema=' + NAVER_MENU_SCHEMA_VERSION;
   const cacheKey = new Request(cacheUrl);
   const cached = await cache.match(cacheKey);
   if (cached) return cached;
