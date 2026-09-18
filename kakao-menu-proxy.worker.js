@@ -462,7 +462,7 @@ function generateRoomCode() {
 }
 
 function emptyExcluded() {
-  return { type: [], taste: [], cuisine: [] };
+  return { type: [], cuisine: [] };
 }
 
 function metaKey(code) { return 'room:' + code + ':meta'; }

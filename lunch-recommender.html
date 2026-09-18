@@ -426,10 +426,6 @@
         <div class="chips" id="chips-type"></div>
       </div>
       <div class="filter-group">
-        <div class="group-label">맛</div>
-        <div class="chips" id="chips-taste"></div>
-      </div>
-      <div class="filter-group">
         <div class="group-label">종류</div>
         <div class="chips" id="chips-cuisine"></div>
       </div>
@@ -541,7 +537,6 @@
 
   var RADIUS_OPTIONS = [100, 200, 300, 400, 500];
   var TYPE_OPTIONS = ['면','밥','국물','구이','튀김','분식','기타'];
-  var TASTE_OPTIONS = ['매운맛','순한맛','보통'];
   // 종류(cuisine) 8분류 — "한식/중식/일식/양식"처럼 국가 기준으로 나누면 정작 점심 고를 때
   // 궁금한 "이게 국밥집인지 백반집인지 구내식당인지"가 안 드러나서, 실제 점심 메뉴 스타일
   // 기준으로 재편했다(사용자 정의, 2026-09-16). 순서는 화면에 보이는 칩 순서이기도 하다.
@@ -553,46 +548,46 @@
   // 카테고리명/상호명 키워드 → 태그·추천메뉴 자동 추정 규칙 (선매칭 우선 — 배열에서 먼저 나온
   // 규칙이 이긴다. 예: "카레돈까스"는 "커리"보다 앞에 있는 "돈까스" 규칙에 먼저 걸려야 한다)
   var TAG_RULES = [
-    { kw:['돈까스','돈가스'], type:['튀김','밥'], taste:'순한맛', cuisine:'돈까스/일식/양식', menu:'돈까스' },
-    { kw:['라멘'], type:['면','국물'], taste:'보통', cuisine:'돈까스/일식/양식', menu:'라멘' },
-    { kw:['초밥','스시'], type:['밥'], taste:'순한맛', cuisine:'돈까스/일식/양식', menu:'초밥' },
-    { kw:['칼국수'], type:['면','국물'], taste:'순한맛', cuisine:'면류/분식', menu:'칼국수' },
-    { kw:['수제비'], type:['면','국물'], taste:'순한맛', cuisine:'면류/분식', menu:'수제비' },
-    { kw:['냉면'], type:['면'], taste:'보통', cuisine:'면류/분식', menu:'물냉면' },
-    { kw:['라면'], type:['면','국물'], taste:'보통', cuisine:'면류/분식', menu:'라면' },
-    { kw:['짬뽕'], type:['면','국물'], taste:'매운맛', cuisine:'중식', menu:'짬뽕' },
-    { kw:['짜장','중화요리','중국요리','중국집'], type:['면'], taste:'순한맛', cuisine:'중식', menu:'짜장면' },
-    { kw:['떡볶이','분식'], type:['분식'], taste:'매운맛', cuisine:'면류/분식', menu:'떡볶이' },
-    { kw:['국밥'], type:['국물','밥'], taste:'보통', cuisine:'국밥/탕/찌개', menu:'순대국밥' },
-    { kw:['해장국'], type:['국물','밥'], taste:'보통', cuisine:'국밥/탕/찌개', menu:'해장국' },
-    { kw:['찌개'], type:['국물','밥'], taste:'보통', cuisine:'국밥/탕/찌개', menu:'김치찌개' },
-    { kw:['백반','정식'], type:['밥'], taste:'보통', cuisine:'제육/백반/정식', menu:'오늘의 백반' },
-    { kw:['제육'], type:['구이','밥'], taste:'매운맛', cuisine:'제육/백반/정식', menu:'제육볶음' },
-    { kw:['불백','쌈밥'], type:['구이','밥'], taste:'보통', cuisine:'제육/백반/정식', menu:'불고기쌈밥' },
-    { kw:['생선구이'], type:['구이','밥'], taste:'순한맛', cuisine:'제육/백반/정식', menu:'생선구이' },
-    { kw:['삼겹살','고기','구이'], type:['구이'], taste:'보통', cuisine:'제육/백반/정식', menu:'삼겹살' },
-    { kw:['치킨'], type:['튀김'], taste:'보통', cuisine:'제육/백반/정식', menu:'후라이드치킨' },
-    { kw:['피자'], type:['기타'], taste:'보통', cuisine:'돈까스/일식/양식', menu:'피자' },
-    { kw:['파스타','양식'], type:['면'], taste:'순한맛', cuisine:'돈까스/일식/양식', menu:'파스타' },
-    { kw:['카페','커피','디저트','브런치'], type:['기타'], taste:'보통', cuisine:'간편식/식단관리', menu:'아메리카노' },
-    { kw:['샐러드'], type:['기타'], taste:'순한맛', cuisine:'간편식/식단관리', menu:'샐러드' },
-    { kw:['포케'], type:['밥','기타'], taste:'순한맛', cuisine:'간편식/식단관리', menu:'포케' },
-    { kw:['샌드위치','토스트'], type:['기타'], taste:'순한맛', cuisine:'간편식/식단관리', menu:'샌드위치' },
-    { kw:['버거','햄버거'], type:['기타'], taste:'보통', cuisine:'간편식/식단관리', menu:'수제버거' },
-    { kw:['쌀국수','베트남'], type:['면','국물'], taste:'매운맛', cuisine:'아시안/세계요리', menu:'쌀국수' },
-    { kw:['팟타이','태국'], type:['면'], taste:'매운맛', cuisine:'아시안/세계요리', menu:'팟타이' },
-    { kw:['나시고랭'], type:['밥'], taste:'매운맛', cuisine:'아시안/세계요리', menu:'나시고랭' },
-    { kw:['인도커리','커리'], type:['국물','밥'], taste:'매운맛', cuisine:'아시안/세계요리', menu:'인도커리' },
-    { kw:['타코'], type:['기타'], taste:'매운맛', cuisine:'아시안/세계요리', menu:'타코' },
-    { kw:['마라'], type:['국물','면'], taste:'매운맛', cuisine:'아시안/세계요리', menu:'마라탕' },
-    // 곱창/막창은 소금구이(안 매움)로 먹는 게 기본형이라, 매운맛 표기가 붙은 경우만 매운맛으로
-    // 잡는다. 이 규칙을 일반 규칙("곱창","막창")보다 먼저 둬야 한다(선매칭 우선 — 예: "양념막창"은
-    // "막창"에도 걸리지만 "양념막창" 키워드가 더 먼저 나와야 매운맛으로 잡힌다).
-    { kw:['양념곱창','양념막창','불막창','불곱창','매운곱창','매운막창'], type:['구이'], taste:'매운맛', cuisine:'제육/백반/정식', menu:'양념막창' },
-    { kw:['곱창','막창','대창'], type:['구이'], taste:'보통', cuisine:'제육/백반/정식', menu:'곱창구이' },
-    { kw:['구내식당'], type:['밥','국물'], taste:'보통', cuisine:'구내식당/한식뷔페', menu:'오늘의 메뉴' },
-    { kw:['뷔페'], type:['밥','기타'], taste:'보통', cuisine:'구내식당/한식뷔페', menu:'한식뷔페' },
-    { kw:['김밥'], type:['분식'], taste:'순한맛', cuisine:'면류/분식', menu:'김밥' }
+    { kw:['돈까스','돈가스'], type:['튀김','밥'], cuisine:'돈까스/일식/양식', menu:'돈까스' },
+    { kw:['라멘'], type:['면','국물'], cuisine:'돈까스/일식/양식', menu:'라멘' },
+    { kw:['초밥','스시'], type:['밥'], cuisine:'돈까스/일식/양식', menu:'초밥' },
+    { kw:['칼국수'], type:['면','국물'], cuisine:'면류/분식', menu:'칼국수' },
+    { kw:['수제비'], type:['면','국물'], cuisine:'면류/분식', menu:'수제비' },
+    { kw:['냉면'], type:['면'], cuisine:'면류/분식', menu:'물냉면' },
+    { kw:['라면'], type:['면','국물'], cuisine:'면류/분식', menu:'라면' },
+    { kw:['짬뽕'], type:['면','국물'], cuisine:'중식', menu:'짬뽕' },
+    { kw:['짜장','중화요리','중국요리','중국집'], type:['면'], cuisine:'중식', menu:'짜장면' },
+    { kw:['떡볶이','분식'], type:['분식'], cuisine:'면류/분식', menu:'떡볶이' },
+    { kw:['국밥'], type:['국물','밥'], cuisine:'국밥/탕/찌개', menu:'순대국밥' },
+    { kw:['해장국'], type:['국물','밥'], cuisine:'국밥/탕/찌개', menu:'해장국' },
+    { kw:['찌개'], type:['국물','밥'], cuisine:'국밥/탕/찌개', menu:'김치찌개' },
+    { kw:['백반','정식'], type:['밥'], cuisine:'제육/백반/정식', menu:'오늘의 백반' },
+    { kw:['제육'], type:['구이','밥'], cuisine:'제육/백반/정식', menu:'제육볶음' },
+    { kw:['불백','쌈밥'], type:['구이','밥'], cuisine:'제육/백반/정식', menu:'불고기쌈밥' },
+    { kw:['생선구이'], type:['구이','밥'], cuisine:'제육/백반/정식', menu:'생선구이' },
+    { kw:['삼겹살','고기','구이'], type:['구이'], cuisine:'제육/백반/정식', menu:'삼겹살' },
+    { kw:['치킨'], type:['튀김'], cuisine:'제육/백반/정식', menu:'후라이드치킨' },
+    { kw:['피자'], type:['기타'], cuisine:'돈까스/일식/양식', menu:'피자' },
+    { kw:['파스타','양식'], type:['면'], cuisine:'돈까스/일식/양식', menu:'파스타' },
+    { kw:['카페','커피','디저트','브런치'], type:['기타'], cuisine:'간편식/식단관리', menu:'아메리카노' },
+    { kw:['샐러드'], type:['기타'], cuisine:'간편식/식단관리', menu:'샐러드' },
+    { kw:['포케'], type:['밥','기타'], cuisine:'간편식/식단관리', menu:'포케' },
+    { kw:['샌드위치','토스트'], type:['기타'], cuisine:'간편식/식단관리', menu:'샌드위치' },
+    { kw:['버거','햄버거'], type:['기타'], cuisine:'간편식/식단관리', menu:'수제버거' },
+    { kw:['쌀국수','베트남'], type:['면','국물'], cuisine:'아시안/세계요리', menu:'쌀국수' },
+    { kw:['팟타이','태국'], type:['면'], cuisine:'아시안/세계요리', menu:'팟타이' },
+    { kw:['나시고랭'], type:['밥'], cuisine:'아시안/세계요리', menu:'나시고랭' },
+    { kw:['인도커리','커리'], type:['국물','밥'], cuisine:'아시안/세계요리', menu:'인도커리' },
+    { kw:['타코'], type:['기타'], cuisine:'아시안/세계요리', menu:'타코' },
+    { kw:['마라'], type:['국물','면'], cuisine:'아시안/세계요리', menu:'마라탕' },
+    // "양념막창" 표기가 붙은 경우 대표메뉴 이름을 소금구이 기본형("곱창구이")이 아니라
+    // "양념막창"으로 잡기 위한 규칙. 일반 규칙("곱창","막창")보다 먼저 둬야 한다(선매칭 우선 —
+    // "양념막창"은 "막창"에도 걸리지만 이 규칙이 먼저 나와야 이긴다).
+    { kw:['양념곱창','양념막창','불막창','불곱창','매운곱창','매운막창'], type:['구이'], cuisine:'제육/백반/정식', menu:'양념막창' },
+    { kw:['곱창','막창','대창'], type:['구이'], cuisine:'제육/백반/정식', menu:'곱창구이' },
+    { kw:['구내식당'], type:['밥','국물'], cuisine:'구내식당/한식뷔페', menu:'오늘의 메뉴' },
+    { kw:['뷔페'], type:['밥','기타'], cuisine:'구내식당/한식뷔페', menu:'한식뷔페' },
+    { kw:['김밥'], type:['분식'], cuisine:'면류/분식', menu:'김밥' }
   ];
 
   // 카카오 연동 실패 시 보여줄 예시 데이터입니다. 실제 상호가 아니며, 재검색이 성공하면 실제 데이터로 대체됩니다.
@@ -600,49 +595,49 @@
   var SEED_RESTAURANTS = [
     { id:'seed:1', name:'가산 순두부찌개(예시)', categoryName:'음식점 > 한식 > 찌개,전골', distanceM:220, cuisine:'국밥/탕/찌개',
       menuItems:[
-        { name:'순두부찌개', price:8000, isRecommend:true, type:['국물','밥'], taste:'매운맛' },
-        { name:'된장찌개', price:8000, isRecommend:false, type:['국물','밥'], taste:'보통' },
-        { name:'제육볶음', price:9000, isRecommend:false, type:['구이','밥'], taste:'매운맛' }
+        { name:'순두부찌개', price:8000, isRecommend:true, type:['국물','밥'] },
+        { name:'된장찌개', price:8000, isRecommend:false, type:['국물','밥'] },
+        { name:'제육볶음', price:9000, isRecommend:false, type:['구이','밥'] }
       ] },
     { id:'seed:2', name:'매운짬뽕 전문점(예시)', categoryName:'음식점 > 중식', distanceM:90, cuisine:'중식',
       menuItems:[
-        { name:'불짬뽕', price:9000, isRecommend:true, type:['면','국물'], taste:'매운맛' },
-        { name:'짜장면', price:7000, isRecommend:false, type:['면'], taste:'순한맛' },
-        { name:'탕수육', price:18000, isRecommend:false, type:['튀김'], taste:'순한맛' }
+        { name:'불짬뽕', price:9000, isRecommend:true, type:['면','국물'] },
+        { name:'짜장면', price:7000, isRecommend:false, type:['면'] },
+        { name:'탕수육', price:18000, isRecommend:false, type:['튀김'] }
       ] },
     { id:'seed:3', name:'가산 돈까스(예시)', categoryName:'음식점 > 일식 > 돈까스,우동', distanceM:150, cuisine:'돈까스/일식/양식',
       menuItems:[
-        { name:'등심돈까스', price:11000, isRecommend:true, type:['튀김','밥'], taste:'순한맛' },
-        { name:'카레돈까스', price:12000, isRecommend:false, type:['튀김','밥'], taste:'순한맛' },
-        { name:'우동', price:8000, isRecommend:false, type:['면','국물'], taste:'순한맛' }
+        { name:'등심돈까스', price:11000, isRecommend:true, type:['튀김','밥'] },
+        { name:'카레돈까스', price:12000, isRecommend:false, type:['튀김','밥'] },
+        { name:'우동', price:8000, isRecommend:false, type:['면','국물'] }
       ] },
     { id:'seed:4', name:'산디 김밥천국(예시)', categoryName:'음식점 > 한식 > 분식', distanceM:40, cuisine:'면류/분식',
       menuItems:[
-        { name:'참치김밥', price:4000, isRecommend:true, type:['분식'], taste:'순한맛' },
-        { name:'떡볶이', price:4000, isRecommend:false, type:['분식'], taste:'매운맛' },
-        { name:'순대', price:5000, isRecommend:false, type:['분식'], taste:'보통' }
+        { name:'참치김밥', price:4000, isRecommend:true, type:['분식'] },
+        { name:'떡볶이', price:4000, isRecommend:false, type:['분식'] },
+        { name:'순대', price:5000, isRecommend:false, type:['분식'] }
       ] },
     { id:'seed:5', name:'라멘야(예시)', categoryName:'음식점 > 일식 > 면요리', distanceM:200, cuisine:'돈까스/일식/양식',
       menuItems:[
-        { name:'돈코츠라멘', price:10000, isRecommend:true, type:['면','국물'], taste:'보통' },
-        { name:'교자', price:6000, isRecommend:false, type:['튀김'], taste:'보통' }
+        { name:'돈코츠라멘', price:10000, isRecommend:true, type:['면','국물'] },
+        { name:'교자', price:6000, isRecommend:false, type:['튀김'] }
       ] },
     { id:'seed:6', name:'가산 삼겹살집(예시)', categoryName:'음식점 > 한식 > 육류,고기', distanceM:240, cuisine:'제육/백반/정식',
       menuItems:[
-        { name:'제육쌈밥(런치)', price:9000, isRecommend:true, type:['구이','밥'], taste:'보통' },
-        { name:'된장찌개', price:5000, isRecommend:false, type:['국물','밥'], taste:'보통' }
+        { name:'제육쌈밥(런치)', price:9000, isRecommend:true, type:['구이','밥'] },
+        { name:'된장찌개', price:5000, isRecommend:false, type:['국물','밥'] }
       ] },
     { id:'seed:7', name:'카페 브런치(예시)', categoryName:'카페 > 브런치카페', distanceM:60, cuisine:'간편식/식단관리',
       menuItems:[
-        { name:'크로플세트', price:9500, isRecommend:true, type:['기타'], taste:'순한맛' },
-        { name:'샌드위치', price:8500, isRecommend:false, type:['기타'], taste:'순한맛' },
-        { name:'아메리카노', price:4500, isRecommend:false, type:['기타'], taste:'보통' }
+        { name:'크로플세트', price:9500, isRecommend:true, type:['기타'] },
+        { name:'샌드위치', price:8500, isRecommend:false, type:['기타'] },
+        { name:'아메리카노', price:4500, isRecommend:false, type:['기타'] }
       ] },
     { id:'seed:8', name:'옛날 손칼국수(예시)', categoryName:'음식점 > 한식 > 칼국수', distanceM:180, cuisine:'면류/분식',
       menuItems:[
-        { name:'바지락칼국수', price:9000, isRecommend:true, type:['면','국물'], taste:'순한맛' },
-        { name:'수제비', price:9000, isRecommend:false, type:['면','국물'], taste:'순한맛' },
-        { name:'보쌈소자', price:25000, isRecommend:false, type:['구이'], taste:'보통' }
+        { name:'바지락칼국수', price:9000, isRecommend:true, type:['면','국물'] },
+        { name:'수제비', price:9000, isRecommend:false, type:['면','국물'] },
+        { name:'보쌈소자', price:25000, isRecommend:false, type:['구이'] }
       ] }
   ];
 
@@ -650,7 +645,7 @@
   var state = {
     restaurants: [],
     mode: 'loading', // 'live' | 'seed' | 'loading'
-    selected: { type:[], taste:[], cuisine:[] },
+    selected: { type:[], cuisine:[] },
     recentIds: [],
     // "이 가게 넘기기"로 제외한 식당 id 목록. 파리바게트처럼 메뉴 수십 개짜리 식당이 있으면
     // recentIds만으로는 재검(다시 뽑기)해도 같은 식당의 다른 메뉴만 계속 나올 수 있어서
@@ -719,7 +714,7 @@
   // 중분류 자체는 업종이 아니고 소분류에만 적혀있는 경우도 있음). 그래서 중분류만 보지 않고
   // category_name 전체 문자열에서 키워드를 찾는다. TAG_RULES 키워드 매칭은 상호명 표기가
   // 제각각이라 놓치는 경우가 있으므로(예: "중화요리"는 찾지만 "중국요리"는 못 찾는 식), 카카오가
-  // 이미 분류해준 이 값을 최우선으로 신뢰하고 cuisine을 덮어쓴다. type/taste/signatureMenu는
+  // 이미 분류해준 이 값을 최우선으로 신뢰하고 cuisine을 덮어쓴다. type/signatureMenu는
   // 카테고리만으로는 알 수 없어 계속 키워드 추정에 의존한다.
   //
   // 8분류(CUISINE_OPTIONS)로 재편하면서 "한식" 대분류 하나가 국밥/탕/찌개·제육/백반/정식·
@@ -756,17 +751,17 @@
     }
     return '';
   }
-  // 메뉴 하나의 형태/맛을 메뉴명 키워드로 추정한다 (식당 전체가 아니라 메뉴 단위 — 한 식당
+  // 메뉴 하나의 형태를 메뉴명 키워드로 추정한다 (식당 전체가 아니라 메뉴 단위 — 한 식당
   // 안에 국물/밥/구이가 섞여 있어도 각 메뉴가 자기 형태를 갖도록).
   function inferMenuTags(menuName){
     var hay = menuName || '';
     for(var i=0;i<TAG_RULES.length;i++){
       var rule = TAG_RULES[i];
       for(var j=0;j<rule.kw.length;j++){
-        if(hay.indexOf(rule.kw[j]) !== -1){ return { type: rule.type.slice(), taste: rule.taste }; }
+        if(hay.indexOf(rule.kw[j]) !== -1){ return { type: rule.type.slice() }; }
       }
     }
-    return { type:['기타'], taste:'보통' };
+    return { type:['기타'] };
   }
   // 메뉴 데이터를 하나도 못 구한 식당(자동조회 실패 + 아직 편집도 안 한 경우)의 최후 폴백 —
   // 상호명/카테고리 키워드로 대표메뉴 이름 하나만 추정해서 최소한 빈 카드는 면한다.
@@ -1265,8 +1260,8 @@
     var hasPrice = isFinite(price) && price > 0;
     return hasPrice ? (it.name + ' (' + price.toLocaleString('ko-KR') + '원)') : it.name;
   }
-  // 프록시 응답(items[])을 메뉴 아이템 배열로 변환하면서, 각 메뉴명에 형태/맛 태그를 붙인다
-  // (메뉴 기준 추천의 핵심 — 식당 전체가 아니라 메뉴 하나하나가 자기 형태/맛을 가짐).
+  // 프록시 응답(items[])을 메뉴 아이템 배열로 변환하면서, 각 메뉴명에 형태 태그를 붙인다
+  // (메뉴 기준 추천의 핵심 — 식당 전체가 아니라 메뉴 하나하나가 자기 형태를 가짐).
   function toMenuItems(items){
     if(!items || items.length === 0) return null;
     return items.map(function(it){
@@ -1276,8 +1271,7 @@
         name: it.name,
         price: (isFinite(price) && price > 0) ? price : null,
         isRecommend: !!it.isRecommend,
-        type: tags.type,
-        taste: tags.taste
+        type: tags.type
       };
     });
   }
@@ -1300,10 +1294,10 @@
       return null;
     });
   }
-  // 캐시 네임스페이스에 태그 규칙 버전을 붙여둔다. TAG_RULES의 판정 결과(형태/맛)가 바뀌는
+  // 캐시 네임스페이스에 태그 규칙 버전을 붙여둔다. TAG_RULES의 판정 결과(형태)가 바뀌는
   // 수정을 할 때마다 이 버전을 올리면, 예전 판정으로 이미 캐싱된 메뉴가 새 코드에서도 그대로
-  // 재사용되는 일 없이 자동으로 무효화되어 다시 조회·재태깅된다(실사용 중 "왜 매운맛 필터에
-  // 소막창이 나오냐"처럼, 캐시에 이미 잘못 태깅된 메뉴가 박혀있던 문제가 있었음).
+  // 재사용되는 일 없이 자동으로 무효화되어 다시 조회·재태깅된다(실사용 중 캐시에 이미 잘못
+  // 태깅된 메뉴가 박혀있던 문제가 있었음).
   var TAG_RULES_VERSION = 'v2';
   function fetchMenuFor(placeId){ return fetchMenuFrom('placeId', placeId, 'kakao-'+TAG_RULES_VERSION, 'kakao-live'); }
   function fetchNaverMenuFor(placeId){ return fetchMenuFrom('naverPlaceId', placeId, 'naver-'+TAG_RULES_VERSION, 'naver-live'); }
@@ -1419,13 +1413,11 @@
     if(idx === -1) arr.push(value); else arr.splice(idx,1);
     state.skippedRestaurantIds = [];
   }
-  // 메뉴 기준 추천의 핵심: 추천 단위는 "식당"이 아니라 "식당의 메뉴 하나"다. 형태/맛은 그 메뉴
+  // 메뉴 기준 추천의 핵심: 추천 단위는 "식당"이 아니라 "식당의 메뉴 하나"다. 형태는 그 메뉴
   // 자체의 태그로, 종류(cuisine)는 식당 단위로 판정한다(한 식당 안에서 한식/중식이 섞이는
   // 경우는 드묾). 후보는 (식당, 메뉴) 쌍의 목록이 된다.
   function menuMatchesSelection(menuItem, sel){
-    var typeOk = sel.type.length === 0 || sel.type.some(function(t){ return menuItem.type.indexOf(t) !== -1; });
-    var tasteOk = sel.taste.length === 0 || sel.taste.indexOf(menuItem.taste) !== -1;
-    return typeOk && tasteOk;
+    return sel.type.length === 0 || sel.type.some(function(t){ return menuItem.type.indexOf(t) !== -1; });
   }
   function restaurantMatchesCuisine(r, sel){
     return sel.cuisine.length === 0 || sel.cuisine.indexOf(r.cuisine) !== -1;
@@ -1490,7 +1482,6 @@
   function renderChips(){
     renderRadiusChips();
     renderChipGroup('chips-type', TYPE_OPTIONS, 'type');
-    renderChipGroup('chips-taste', TASTE_OPTIONS, 'taste');
     renderChipGroup('chips-cuisine', CUISINE_OPTIONS, 'cuisine');
   }
   function renderChipGroup(containerId, options, group){
@@ -1906,15 +1897,15 @@
       });
     });
 
-    form.appendChild(el('label', null, '메뉴 목록 (메뉴마다 형태/맛을 지정하면 그 조건에서 이 메뉴가 추천돼요)'));
+    form.appendChild(el('label', null, '메뉴 목록 (메뉴마다 형태를 지정하면 그 조건에서 이 메뉴가 추천돼요)'));
     var menuListWrap = el('div','menu-edit-list');
     form.appendChild(menuListWrap);
 
     // 서버/저장된 데이터를 그대로 mutate하지 않도록 로컬 사본으로 편집하다가 "저장" 시에만 반영.
     var localMenus = (r.menuItems||[]).map(function(m){
-      return { name:m.name, price:m.price, isRecommend:!!m.isRecommend, type:(m.type||[]).slice(), taste:m.taste||'보통' };
+      return { name:m.name, price:m.price, isRecommend:!!m.isRecommend, type:(m.type||[]).slice() };
     });
-    if(localMenus.length === 0){ localMenus.push({ name:'', price:null, isRecommend:true, type:[], taste:'보통' }); }
+    if(localMenus.length === 0){ localMenus.push({ name:'', price:null, isRecommend:true, type:[] }); }
 
     function renderMenuRows(){
       menuListWrap.innerHTML = '';
@@ -1945,7 +1936,7 @@
         var delBtn = el('button','menu-edit-del','✕'); delBtn.type='button'; delBtn.title='메뉴 삭제';
         delBtn.addEventListener('click', function(){
           localMenus.splice(idx,1);
-          if(localMenus.length===0) localMenus.push({ name:'', price:null, isRecommend:true, type:[], taste:'보통' });
+          if(localMenus.length===0) localMenus.push({ name:'', price:null, isRecommend:true, type:[] });
           renderMenuRows();
         });
         topRow.appendChild(delBtn);
@@ -1964,15 +1955,6 @@
         });
         row.appendChild(typeChips);
 
-        var tasteSelect = el('select');
-        TASTE_OPTIONS.forEach(function(opt){
-          var o = el('option', null, opt); o.value = opt;
-          if(opt === menu.taste) o.selected = true;
-          tasteSelect.appendChild(o);
-        });
-        tasteSelect.addEventListener('change', function(){ menu.taste = tasteSelect.value; });
-        row.appendChild(tasteSelect);
-
         menuListWrap.appendChild(row);
       });
     }
@@ -1982,7 +1964,7 @@
     addMenuBtn.type='button';
     addMenuBtn.style.marginBottom = '8px';
     addMenuBtn.addEventListener('click', function(){
-      localMenus.push({ name:'', price:null, isRecommend: localMenus.length===0, type:[], taste:'보통' });
+      localMenus.push({ name:'', price:null, isRecommend: localMenus.length===0, type:[] });
       renderMenuRows();
     });
     form.appendChild(addMenuBtn);
@@ -1998,7 +1980,7 @@
         if(res){
           r.menuItems = res.items; r.menuSource = res.source;
           localMenus.length = 0;
-          res.items.forEach(function(mi){ localMenus.push({ name:mi.name, price:mi.price, isRecommend:mi.isRecommend, type:mi.type.slice(), taste:mi.taste }); });
+          res.items.forEach(function(mi){ localMenus.push({ name:mi.name, price:mi.price, isRecommend:mi.isRecommend, type:mi.type.slice() }); });
           renderMenuRows();
           renderList(); updateCtaState();
         } else {
@@ -2012,7 +1994,7 @@
     saveBtn.style.marginTop = '8px';
     saveBtn.addEventListener('click', function(){
       var menuItems = localMenus.filter(function(m){ return m.name.trim(); }).map(function(m){
-        return { name:m.name.trim(), price:m.price, isRecommend:!!m.isRecommend, type:m.type, taste:m.taste };
+        return { name:m.name.trim(), price:m.price, isRecommend:!!m.isRecommend, type:m.type };
       });
       var patch = { cuisine: cuisineSelect.value, menuItems: menuItems, menuSource: 'manual', edited: true };
       var saved = saveOverride(r.id, patch);
@@ -2115,7 +2097,7 @@
   var teamState = {
     code: null, memberId: null, memberName: null, isHost: false,
     members: [], result: null,
-    myExcluded: { type:[], taste:[], cuisine:[] }, // 아직 서버에 제출 안 한, 편집 중인 내 조건
+    myExcluded: { type:[], cuisine:[] }, // 아직 서버에 제출 안 한, 편집 중인 내 조건
     myRadius: CONFIG.DEFAULT_RADIUS_M, // 마찬가지로 아직 제출 안 한, 편집 중인 내 반경
     pollTimer: null
   };
@@ -2270,7 +2252,7 @@
 
   function enterTeamRoom(code, memberId, name, isHost){
     teamState.code = code; teamState.memberId = memberId; teamState.memberName = name; teamState.isHost = isHost;
-    teamState.myExcluded = { type:[], taste:[], cuisine:[] };
+    teamState.myExcluded = { type:[], cuisine:[] };
     // 팀 반경도 하나의 조건값이지만, 아예 처음부터 고르게 하기보단 이미 개인 모드에서 골라둔
     // 반경(state.radiusM)을 기본값으로 깔아준다 — 어차피 취향이 같은 사람일 확률이 높음.
     teamState.myRadius = state.radiusM || CONFIG.DEFAULT_RADIUS_M;
@@ -2283,7 +2265,7 @@
   }
   function leaveTeamRoom(){
     if(teamState.pollTimer){ clearInterval(teamState.pollTimer); teamState.pollTimer = null; }
-    teamState = { code:null, memberId:null, memberName:null, isHost:false, members:[], result:null, myExcluded:{type:[],taste:[],cuisine:[]}, myRadius:CONFIG.DEFAULT_RADIUS_M, pollTimer:null };
+    teamState = { code:null, memberId:null, memberName:null, isHost:false, members:[], result:null, myExcluded:{type:[],cuisine:[]}, myRadius:CONFIG.DEFAULT_RADIUS_M, pollTimer:null };
     storageSet('team', null);
     $('teamActionsInit').hidden = false;
     $('teamRoomBody').hidden = true;
@@ -2306,10 +2288,7 @@
   // type은 여러 개 중 하나라도 맞으면(OR) 통과 — 메뉴 하나하나에 대해 판정한다.
   function menuMatchesMemberFilter(menuItem, excluded){
     var allowedType = TYPE_OPTIONS.filter(function(t){ return excluded.type.indexOf(t)===-1; });
-    var allowedTaste = TASTE_OPTIONS.filter(function(t){ return excluded.taste.indexOf(t)===-1; });
-    var typeOk = menuItem.type.some(function(t){ return allowedType.indexOf(t)!==-1; });
-    var tasteOk = allowedTaste.indexOf(menuItem.taste)!==-1;
-    return typeOk && tasteOk;
+    return menuItem.type.some(function(t){ return allowedType.indexOf(t)!==-1; });
   }
   function restaurantMatchesMemberCuisine(r, excluded){
     var allowedCuisine = CUISINE_OPTIONS.filter(function(t){ return excluded.cuisine.indexOf(t)===-1; });
@@ -2439,12 +2418,9 @@
     wrap.appendChild(el('div','group-label','형태 (클릭하면 제외돼요, 기본은 전체 허용)'));
     var g1 = el('div','team-condition-group'); g1.appendChild(renderTeamConditionChips('type', TYPE_OPTIONS));
     wrap.appendChild(g1);
-    wrap.appendChild(el('div','group-label','맛'));
-    var g2 = el('div','team-condition-group'); g2.appendChild(renderTeamConditionChips('taste', TASTE_OPTIONS));
-    wrap.appendChild(g2);
     wrap.appendChild(el('div','group-label','종류'));
-    var g3 = el('div','team-condition-group'); g3.appendChild(renderTeamConditionChips('cuisine', CUISINE_OPTIONS));
-    wrap.appendChild(g3);
+    var g2 = el('div','team-condition-group'); g2.appendChild(renderTeamConditionChips('cuisine', CUISINE_OPTIONS));
+    wrap.appendChild(g2);
 
     var foot = el('div','team-foot');
     var readyBtn = el('button','btn primary','준비 완료'); readyBtn.type='button'; readyBtn.style.flex='none';
@@ -2646,7 +2622,7 @@
     $('rerollBtn').addEventListener('click', onRecommend);
     $('skipRestaurantBtn').addEventListener('click', onSkipRestaurant);
     $('resetFilters').addEventListener('click', function(){
-      state.selected = { type:[], taste:[], cuisine:[] };
+      state.selected = { type:[], cuisine:[] };
       state.skippedRestaurantIds = [];
       renderChips(); updateCtaState();
     });
