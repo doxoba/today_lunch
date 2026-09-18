@@ -863,21 +863,39 @@ async function handleNaverMenu(naverPlaceId) {
     return json({ error: 'APOLLO_STATE 파싱 실패', detail: String(e) }, 502);
   }
 
-  const menuItems = Object.keys(apollo)
-    .map((k) => apollo[k])
-    .filter((v) => v && v.__typename === 'Menu')
-    .sort((a, b) => (a.index || 0) - (b.index || 0));
+  // 2026-09 기준 네이버 place 페이지는 메뉴 항목의 __typename을 'Menu'에서
+  // 'PlaceMenuItem'으로 바꿨고(가격도 'PlaceMenuPrice'로 분리, 표시용 문자열만 제공),
+  // 항목 나열 순서/추천 여부는 'PlaceMenuCategory'(kind: 'uncategorized'/'recommend')의
+  // itemIds를 통해서만 알 수 있다.
+  const values = Object.keys(apollo).map((k) => apollo[k]);
+  const itemsById = {};
+  values
+    .filter((v) => v && v.__typename === 'PlaceMenuItem')
+    .forEach((it) => { itemsById[it.id] = it; });
+
+  const categories = values.filter((v) => v && v.__typename === 'PlaceMenuCategory');
+  const orderCategory = categories.find((c) => c.kind === 'uncategorized') || categories[0];
+  const orderedIds = orderCategory ? orderCategory.itemIds : Object.keys(itemsById);
+  const recommendCategory = categories.find((c) => c.kind === 'recommend');
+  const recommendIds = new Set(recommendCategory ? recommendCategory.itemIds : []);
+
+  const menuItems = orderedIds.map((id) => itemsById[id]).filter(Boolean);
 
   const result = {
     placeId: naverPlaceId,
-    items: menuItems.map((it) => ({
-      name: it.name,
-      price: it.price != null && it.price !== '' ? Number(it.price) : null,
-      isRecommend: !!it.recommend,
-      recommendReasons: [],
-      description: it.description || null,
-      photoUrl: (it.images && it.images[0]) || null,
-    })),
+    items: menuItems.map((it) => {
+      const priceDigits = it.price && it.price.displayText
+        ? it.price.displayText.replace(/[^0-9]/g, '')
+        : '';
+      return {
+        name: it.name,
+        price: priceDigits ? Number(priceDigits) : null,
+        isRecommend: (Array.isArray(it.badges) && it.badges.indexOf('repr') !== -1) || recommendIds.has(it.id),
+        recommendReasons: [],
+        description: it.description || null,
+        photoUrl: it.thumbnailUrl || (it.images && it.images[0] && it.images[0].url) || null,
+      };
+    }),
   };
 
   const response = json(result, 200, {
