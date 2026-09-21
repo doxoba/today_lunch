@@ -20,8 +20,10 @@
     --accent-tint:   #e0f2ec;
     --text:          #161826;
     --text-body:     #4a4d59;
-    --text-muted:    #8a8d9a;
-    --text-faint:    #9a9da8;
+    /* 2026-09-21 CBT에서 흰 배경 대비 3.3:1/2.7:1로 WCAG AA(4.5:1) 미달이 확인돼(라벨/도움말
+       텍스트에 쓰이는데도) 대비를 보강했다 — 색감(회색조)은 유지하고 밝기만 낮췄다. */
+    --text-muted:    #5f6270;
+    --text-faint:    #6c6f7c;
 
     /* Radius */
     --r-sm: 8px;
@@ -72,9 +74,21 @@
 
   /* ---- 3-column board ---- */
   .board{display:grid; grid-template-columns:1fr 1.3fr 1fr; gap:20px; margin-bottom:20px;}
+  /* 지도 패널이 없을 때(예시 데이터 모드, 또는 검색 중)는 3칸 중 1칸이 빈 채로 남아 비대칭
+     레이아웃이 되므로, 그럴 땐 2칸으로 줄여 남는 공간이 생기지 않게 한다. */
+  .board.no-map{grid-template-columns:1fr 1.3fr;}
   @media (max-width:1023px){
-    .board{grid-template-columns:1fr;}
+    .board, .board.no-map{grid-template-columns:1fr;}
     #map{min-height:260px;}
+  }
+  /* 375px급 좁은 휴대폰 화면 대응 — 팀원이 초대 코드를 입력하거나 조건을 제출하는 흐름은
+     실제로는 각자 휴대폰에서 이뤄질 가능성이 커서, 1023px 기준 한 단계만으로는 여백/칩이
+     과하게 빽빽해진다. */
+  @media (max-width:480px){
+    body{padding:16px 8px;}
+    .shell{padding:16px;}
+    .result-name{font-size:24px;}
+    .chip{padding:6px 11px; font-size:12px;}
   }
 
   .panel{background:var(--surface); border:1px solid var(--border-soft); border-radius:var(--r-lg);}
@@ -94,6 +108,8 @@
   }
   .chip:hover{border-color:var(--accent); color:var(--accent);}
   .chip.active{background:var(--accent); color:#fff; border-color:var(--accent); font-weight:500;}
+  .chip:disabled{opacity:.5; cursor:not-allowed;}
+  .chip:disabled:hover{border-color:var(--border); color:var(--text-body);}
   .filter-foot{margin-top:auto; display:flex; flex-direction:column; gap:10px;}
   .reset-link{
     background:none; border:none; color:var(--text-faint); text-decoration:underline;
@@ -140,12 +156,17 @@
   .other-label{font-size:11px; font-weight:500; color:var(--text-faint); margin:0 0 6px;}
   .other-list{margin:0 0 20px; padding-left:18px; font-size:13px; font-weight:400; line-height:1.7; color:var(--text-body);}
   .result-actions{display:flex; flex-wrap:wrap; gap:8px; margin-top:auto;}
+  /* 버튼 4개(다시 뽑기/이 가게 넘기기/길찾기/지도에서 보기)가 좁은 화면에서 줄바꿈될 때,
+     기본 .btn의 flex:1 + nowrap 조합은 남은 버튼들을 억지로 늘려 긴 라벨이 잘리거나 겹쳐
+     보일 수 있다(CBT에서 발견) — 여기서만 최소 폭을 주고 필요하면 두 줄로 접히게 한다. */
+  .result-actions .btn{flex:1 1 128px; white-space:normal;}
   .btn{
     flex:1; padding:10px 12px; border-radius:var(--r-sm); font-size:13px; font-weight:500; cursor:pointer;
     text-align:center; text-decoration:none; display:inline-flex; align-items:center; justify-content:center;
     gap:6px; white-space:nowrap; transition:background .12s;
   }
   .btn:hover{text-decoration:none;}
+  .btn:disabled{opacity:.45; cursor:not-allowed; pointer-events:none;}
   .btn-outline-accent{background:transparent; border:1px solid var(--accent); color:var(--accent);}
   .btn-outline-accent:hover{background:var(--accent-tint); color:var(--accent);}
   .btn-outline{background:transparent; border:1px solid var(--border); color:var(--text-body);}
@@ -174,6 +195,7 @@
     background:#fff; color:var(--text-body); font-size:12px; cursor:pointer;
   }
   .accordion-foot button:hover{border-color:var(--accent); color:var(--accent);}
+  .accordion-foot button:disabled{opacity:.5; cursor:not-allowed;}
   .empty-state{text-align:center; color:var(--text-muted); font-size:13px; padding:20px 0;}
 
   /* ---- 식당 목록 행 (JS가 생성) ---- */
@@ -371,7 +393,7 @@
   </div>
 
   <div class="modal-overlay" id="modalOverlay" hidden>
-    <div class="modal" role="dialog" aria-modal="true">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
       <div class="modal-head">
         <div class="modal-title" id="modalTitle"></div>
         <button class="modal-close" id="modalCloseBtn" type="button" aria-label="닫기"><i class="ph ph-x" aria-hidden="true"></i></button>
@@ -413,7 +435,7 @@
     <div class="rail-pill"><i class="ph ph-train" aria-hidden="true"></i>1호선 서쪽 구역</div>
   </header>
 
-  <div class="board">
+  <div class="board" id="board">
 
     <div class="panel panel-filters">
       <div class="section-label">조건</div>
@@ -460,7 +482,7 @@
           <a class="btn btn-outline" id="resultMapLink" href="#" target="_blank" rel="noopener">지도에서 보기</a>
         </div>
       </div>
-      <div class="result-empty">조건을 고르고 버튼을 눌러보세요</div>
+      <div class="result-empty" id="resultEmptyText">조건을 고르고 버튼을 눌러보세요</div>
     </div>
 
     <div class="panel panel-map" id="mapCard">
@@ -473,6 +495,7 @@
   <details class="accordion" open>
     <summary>주변 식당 목록 · 정보 편집<i class="ph ph-caret-down" aria-hidden="true"></i></summary>
     <div class="chips" id="listCategoryChips" style="margin:12px 16px 0;"></div>
+    <p class="modal-help" style="margin:6px 16px 0;">이 필터는 아래 목록을 훑어보는 용도예요 — 위쪽 "오늘 뭐 먹지?" 추천 결과에는 영향을 주지 않아요.</p>
     <div class="banner" id="searchIncompleteWarning" hidden style="margin:12px 16px 0;">
       ⚠️ 이 반경은 상점이 워낙 밀집해 있어(카카오 API 45건 제한) 일부가 누락됐을 수 있어요. 반경을 줄이거나, 아래에서 직접 확인해 빠진 식당은 없는지 대조해보세요.
     </div>
@@ -645,6 +668,10 @@
   var state = {
     restaurants: [],
     mode: 'loading', // 'live' | 'seed' | 'loading'
+    // mode와 별개다 — mode는 "마지막으로 성공한 데이터 소스"를 뜻해서 재검색 중에도 이전 값을
+    // 그대로 들고 있지만, loading은 "지금 이 순간 새 데이터를 받아오고 있는지"만 나타낸다
+    // (초기 로딩/반경 변경/재검색 모두 이 플래그로 로딩 피드백을 보여준다).
+    loading: false,
     selected: { type:[], cuisine:[] },
     recentIds: [],
     // "이 가게 넘기기"로 제외한 식당 id 목록. 파리바게트처럼 메뉴 수십 개짜리 식당이 있으면
@@ -691,6 +718,17 @@
   }
   function storageSet(key, value){
     try{ localStorage.setItem(CONFIG.STORAGE_PREFIX + key, JSON.stringify(value)); }catch(e){}
+  }
+  // 이 기기(브라우저)를 식별하는 익명 토큰. 로그인 시스템이 없는 앱이라, 가게별 댓글(리뷰)의
+  // "본인 것만 삭제 가능" 판단을 서버가 이 토큰으로 대신한다(CBT에서 "누구나 남의 댓글을
+  // 삭제할 수 있다"는 문제가 발견됨). 개인을 식별하지 않는, 이 브라우저에만 남는 값이다.
+  function getDeviceId(){
+    var id = storageGet('deviceId', null);
+    if(!id){
+      id = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : (Date.now() + '-' + Math.random().toString(36).slice(2));
+      storageSet('deviceId', id);
+    }
+    return id;
   }
   function haversine(a, b){
     var R = 6371000;
@@ -1536,6 +1574,26 @@
       help.hidden = true;
     }
   }
+  // 초기 로딩/반경 변경/재검색 동안 "화면이 멈춘 것처럼" 보이던 문제(CBT에서 발견) — 로딩
+  // 중임을 눈에 보이게 알리고, 그동안 CTA·다시뽑기·재검색·반경 칩을 눌러도 조용히 무시되는
+  // 대신 아예 눌리지 않게(비활성) 만든다. renderAll이 끝나면 각 렌더 함수가 정상 상태로
+  // 되돌려놓으므로 여기서는 로딩 시작 시점의 상태만 맞춰준다.
+  function updateLoadingUi(){
+    var loading = state.loading;
+    var help = $('ctaHelp');
+    $('recommendBtn').disabled = loading;
+    $('rerollBtn').disabled = loading;
+    $('skipRestaurantBtn').disabled = loading;
+    $('researchBtn').disabled = loading;
+    Array.prototype.forEach.call($('chips-radius').querySelectorAll('button'), function(b){ b.disabled = loading; });
+    if(loading){
+      help.hidden = false;
+      help.textContent = '식당 정보를 불러오는 중이에요… (몇 초 정도 걸려요)';
+      setMapPanelVisible(false);
+    }
+    var emptyText = $('resultEmptyText');
+    if(emptyText) emptyText.textContent = loading ? '식당을 찾는 중이에요…' : '조건을 고르고 버튼을 눌러보세요';
+  }
   // "오늘 뭐 먹지?" 결과 카드(#resultCard)는 추천이 바뀔 때마다 재사용되는 단일 DOM이라,
   // 지금 카드에 떠 있는 식당이 어느 것인지·댓글을 이미 불러왔는지를 따로 기억해둬야 한다
   // (buildRow의 행별 클로저 변수와 달리 카드는 하나뿐이라 모듈 전역에 둔다).
@@ -1803,7 +1861,7 @@
     cafeteriaSaveBtn.addEventListener('click', function(){
       var m = cafeteriaIdInput.value.match(/(_[A-Za-z0-9_-]+)/);
       var channelId = m ? m[1] : '';
-      if(!channelId){ alert('카카오톡 채널 ID를 찾을 수 없어요. pf.kakao.com/_xxxxx 형태의 링크나 _xxxxx만 입력해주세요.'); return; }
+      if(!channelId){ showAlert('카카오톡 채널 ID를 찾을 수 없어요. pf.kakao.com/_xxxxx 형태의 링크나 _xxxxx만 입력해주세요.'); return; }
       var saved = saveOverride(r.id, { cafeteriaChannelId: channelId });
       r.cafeteriaChannelId = saved.cafeteriaChannelId;
       cafeteriaSaveBtn.disabled = true; cafeteriaSaveBtn.textContent = '조회 중…';
@@ -1813,7 +1871,7 @@
           r.cafeteriaMenuImage = res;
           refreshAfterCafeteriaImageChange();
         } else {
-          alert('메뉴 사진을 찾지 못했어요. 채널ID가 맞는지 확인해주세요.');
+          showAlert('메뉴 사진을 찾지 못했어요. 채널ID가 맞는지 확인해주세요.');
         }
       });
     });
@@ -1822,23 +1880,14 @@
     // 파일 선택 없이 바로 Ctrl+V로 붙여넣으면 등록된다(카카오톡/인스타그램 화면을 캡처한 뒤
     // 그대로 붙여넣는 흐름을 염두에 둔 UX). 매번 그 식당의 "가장 최근에 올린 사진 하나"로
     // 덮어쓰고, 조회 시점에 Worker가 오늘(KST) 날짜인지 확인해서 아니면 안 보여준다.
-    form.appendChild(el('label', null, '오늘의 메뉴 사진 (선택 — 카카오톡 채널이 없는 식당은 캡처해서 여기에 Ctrl+V로 붙여넣기)'));
-    var cafeteriaPasteZone = el('div', 'cafeteria-paste-zone', '여기를 클릭하고 Ctrl+V로 사진을 붙여넣으세요');
+    form.appendChild(el('label', null, '오늘의 메뉴 사진 (선택 — 카카오톡 채널이 없는 식당은 캡처해서 여기를 클릭해 선택하거나 Ctrl+V로 붙여넣기)'));
+    var cafeteriaPasteZone = el('div', 'cafeteria-paste-zone', '여기를 클릭해 사진을 선택하거나, 클릭 후 Ctrl+V로 붙여넣으세요');
     cafeteriaPasteZone.tabIndex = 0;
     form.appendChild(cafeteriaPasteZone);
     var cafeteriaPasteStatus = el('div', 'cafeteria-paste-status');
     form.appendChild(cafeteriaPasteStatus);
 
-    cafeteriaPasteZone.addEventListener('paste', function(e){
-      var items = (e.clipboardData && e.clipboardData.items) || [];
-      var imageItem = null;
-      for(var i=0;i<items.length;i++){
-        if(items[i].type && items[i].type.indexOf('image/') === 0){ imageItem = items[i]; break; }
-      }
-      if(!imageItem) return;
-      e.preventDefault();
-      var file = imageItem.getAsFile();
-      if(!file) return;
+    wirePasteOrClickZone(cafeteriaPasteZone, function(file){
       cafeteriaPasteStatus.textContent = '업로드 중…';
       resizeImageFile(file, CONFIG.REVIEW_PHOTO_MAX_DIM, CONFIG.REVIEW_PHOTO_QUALITY)
         .then(function(photoDataUrl){ return uploadCafeteriaManualPhoto(r.id, photoDataUrl).then(function(){ return photoDataUrl; }); })
@@ -1869,16 +1918,7 @@
       slot.appendChild(status);
       weeklyGrid.appendChild(slot);
 
-      zone.addEventListener('paste', function(e){
-        var items = (e.clipboardData && e.clipboardData.items) || [];
-        var imageItem = null;
-        for(var i=0;i<items.length;i++){
-          if(items[i].type && items[i].type.indexOf('image/') === 0){ imageItem = items[i]; break; }
-        }
-        if(!imageItem) return;
-        e.preventDefault();
-        var file = imageItem.getAsFile();
-        if(!file) return;
+      wirePasteOrClickZone(zone, function(file){
         status.textContent = '업로드 중…';
         resizeImageFile(file, CONFIG.REVIEW_PHOTO_MAX_DIM, CONFIG.REVIEW_PHOTO_QUALITY)
           .then(function(photoDataUrl){ return uploadCafeteriaWeeklyPhoto(r.id, weekday, photoDataUrl); })
@@ -1971,7 +2011,7 @@
 
     naverSaveBtn.addEventListener('click', function(){
       var naverPlaceId = extractNaverPlaceId(naverIdInput.value);
-      if(!naverPlaceId){ alert('숫자로 된 네이버 place id를 찾을 수 없어요. 네이버지도 URL(pcmap.place.naver.com/restaurant/숫자/...)을 확인해주세요.'); return; }
+      if(!naverPlaceId){ showAlert('숫자로 된 네이버 place id를 찾을 수 없어요. 네이버지도 URL(pcmap.place.naver.com/restaurant/숫자/...)을 확인해주세요.'); return; }
       var saved = saveOverride(r.id, { naverPlaceId: naverPlaceId });
       r.naverPlaceId = saved.naverPlaceId;
       naverSaveBtn.disabled = true; naverSaveBtn.textContent = '조회 중…';
@@ -1984,7 +2024,7 @@
           renderMenuRows();
           renderList(); updateCtaState();
         } else {
-          alert('메뉴를 찾지 못했어요. place id가 맞는지, 그 식당에 메뉴 탭이 있는지 확인해주세요.');
+          showAlert('메뉴를 찾지 못했어요. place id가 맞는지, 그 식당에 메뉴 탭이 있는지 확인해주세요.');
         }
       });
     });
@@ -2008,27 +2048,41 @@
     resetBtn.type='button';
     resetBtn.style.marginLeft = '10px';
     resetBtn.addEventListener('click', function(){
-      if(!confirm('이 식당에 저장한 수동 편집/네이버 place id를 모두 지우고 자동 값으로 되돌릴까요?')) return;
-      var all = loadOverrides();
-      delete all[r.id];
-      storageSet('overrides', all);
-      location.reload();
+      showConfirm('이 식당에 저장한 수동 편집/네이버 place id를 모두 지우고 자동 값으로 되돌릴까요?', function(){
+        var all = loadOverrides();
+        delete all[r.id];
+        storageSet('overrides', all);
+        location.reload();
+      });
     });
     form.appendChild(resetBtn);
     return form;
   }
 
+  // 지도 패널 표시 여부와 3칸→2칸 그리드 전환을 한 곳에서 같이 처리한다(지도가 없으면
+  // 3번째 칸이 그냥 비어 비대칭 레이아웃이 되는 문제를 막기 위함 — 예시 데이터 모드와
+  // 로딩 중 모두 같은 이유로 지도가 없다).
+  function setMapPanelVisible(visible){
+    $('mapCard').hidden = !visible;
+    $('board').classList.toggle('no-map', !visible);
+  }
   function renderAll(officeCoord){
+    // updateLoadingUi()가 로딩 시작 시 꺼뒀던 버튼들 중, 반경 칩(renderChips가 매번 새로
+    // 그림)과 CTA(updateCtaState가 아래서 다시 계산함)를 빼면 다시뽑기/재검색 두 개는 이
+    // 함수가 늘 다시 켜줘야 한다 — 안 그러면 로딩이 끝난 뒤에도 계속 비활성 상태로 남는다.
+    $('rerollBtn').disabled = false;
+    $('skipRestaurantBtn').disabled = false;
+    $('researchBtn').disabled = false;
     updatePageSub();
     renderChips();
     renderListCategoryFilter();
     updateCtaState();
     renderList();
     if(state.mode === 'live' && officeCoord){
-      $('mapCard').hidden = false;
+      setMapPanelVisible(true);
       renderMap(officeCoord);
     } else {
-      $('mapCard').hidden = true;
+      setMapPanelVisible(false);
     }
     // 검증(2번 항목) 목적의 진단 정보: 반경 내에서 몇 곳을 찾았는지 눈으로 바로 대조해볼 수 있게
     // 개수를 노출하고, 재귀 분할 탐색이 45건 캡에 걸린 채 더 못 쪼갠 경우(극히 밀집한 지역에서
@@ -2099,6 +2153,7 @@
     members: [], result: null,
     myExcluded: { type:[], cuisine:[] }, // 아직 서버에 제출 안 한, 편집 중인 내 조건
     myRadius: CONFIG.DEFAULT_RADIUS_M, // 마찬가지로 아직 제출 안 한, 편집 중인 내 반경
+    lastSubmitted: null, // 마지막으로 "준비 완료"에 성공한 { excluded, radius } — null이면 아직 한 번도 제출 안 함
     pollTimer: null
   };
 
@@ -2112,12 +2167,45 @@
   }
 
   // ---- 모달 ----
+  // 열 때 모달 안으로 포커스를 옮기고 닫을 때 원래 있던 곳으로 되돌린다(CBT에서 키보드
+  // 사용자가 모달이 열려도 포커스가 배경에 남아있는 문제가 발견됨). Tab 트랩은 아래
+  // DOMContentLoaded의 keydown 리스너에서 같이 처리한다.
+  var modalLastFocused = null;
   function openModal(title, bodyEl){
     $('modalTitle').textContent = title;
     var body = $('modalBody'); body.innerHTML = ''; body.appendChild(bodyEl);
     $('modalOverlay').hidden = false;
+    modalLastFocused = document.activeElement;
+    var focusable = body.querySelector('input, button, a, textarea, select');
+    (focusable || $('modalCloseBtn')).focus();
   }
-  function closeModal(){ $('modalOverlay').hidden = true; $('modalBody').innerHTML = ''; }
+  function closeModal(){
+    $('modalOverlay').hidden = true; $('modalBody').innerHTML = '';
+    if(modalLastFocused && typeof modalLastFocused.focus === 'function') modalLastFocused.focus();
+    modalLastFocused = null;
+  }
+  // 브라우저 기본 alert()/confirm()은 커스텀 모달과 톤이 안 맞고 모바일에서 부자연스러워
+  // (CBT에서 발견), 있는 모달을 재사용해 같은 스타일의 알림/확인 창을 대신 띄운다.
+  function showAlert(message){
+    var body = el('div', null, '<p class="modal-help">' + escapeHtml(message) + '</p>');
+    var actions = el('div','modal-actions');
+    var okBtn = el('button','btn primary','확인'); okBtn.type='button';
+    okBtn.addEventListener('click', closeModal);
+    actions.appendChild(okBtn);
+    body.appendChild(actions);
+    openModal('알림', body);
+  }
+  function showConfirm(message, onConfirm){
+    var body = el('div', null, '<p class="modal-help">' + escapeHtml(message) + '</p>');
+    var actions = el('div','modal-actions');
+    var cancelBtn = el('button','btn btn-outline','취소'); cancelBtn.type='button';
+    cancelBtn.addEventListener('click', closeModal);
+    var okBtn = el('button','btn primary','확인'); okBtn.type='button';
+    okBtn.addEventListener('click', function(){ closeModal(); onConfirm(); });
+    actions.appendChild(cancelBtn); actions.appendChild(okBtn);
+    body.appendChild(actions);
+    openModal('확인', body);
+  }
 
   // ---- 댓글 사진 크게 보기(라이트박스) ----
   function openPhotoLightbox(url){
@@ -2141,13 +2229,19 @@
     u.searchParams.set('name', r.name);
     return u.toString();
   }
+  // PC에서 보고 있으면 QR을 스캔하면 되지만, 이 화면을 이미 휴대폰으로 열어본 경우엔 자기
+  // 폰으로 자기 화면의 QR을 찍어야 하는 상황이 되어 무의미해진다(CBT에서 발견) — 그래서
+  // URL을 그냥 텍스트가 아니라 눌러서 바로 이동할 수 있는 링크로도 같이 제공한다.
   function onShowReviewQr(r){
     var url = buildReviewUrl(r);
     var body = el('div', null,
-      '<p class="modal-help">휴대폰으로 아래 QR을 스캔하면 이 식당(' + escapeHtml(r.name) + ')에 사진·댓글을 바로 남길 수 있어요.</p>');
+      '<p class="modal-help">PC로 보고 있다면 아래 QR을 휴대폰으로 스캔하세요. 이미 휴대폰으로 이 화면을 보고 있다면, QR 대신 아래 링크를 눌러 이 식당(' + escapeHtml(r.name) + ')에 사진·댓글을 바로 남길 수 있어요.</p>');
     var qrWrap = el('div','qr-wrap');
     body.appendChild(qrWrap);
-    body.appendChild(el('p','modal-help', escapeHtml(url)));
+    var link = el('a', 'modal-help', escapeHtml(url));
+    link.href = url; link.target = '_blank'; link.rel = 'noopener';
+    link.style.display = 'block'; link.style.wordBreak = 'break-all';
+    body.appendChild(link);
     openModal('댓글 남기기 — ' + r.name, body);
     new QRCode(qrWrap, { text: url, width: 220, height: 220, correctLevel: QRCode.CorrectLevel.M });
   }
@@ -2156,7 +2250,7 @@
   function loadReviewsIntoPanel(placeId, panel){
     panel.innerHTML = '';
     panel.appendChild(el('p','modal-help','불러오는 중…'));
-    teamApi('/review/list?placeId=' + encodeURIComponent(placeId))
+    teamApi('/review/list?placeId=' + encodeURIComponent(placeId) + '&viewerToken=' + encodeURIComponent(getDeviceId()))
       .then(function(data){
         panel.innerHTML = '';
         if(!data.reviews || data.reviews.length === 0){
@@ -2181,17 +2275,22 @@
     var meta = el('div','review-meta');
     meta.appendChild(el('div','review-date', new Date(rev.createdAt).toLocaleString('ko-KR')));
     if(rev.review) meta.appendChild(el('div','review-text', escapeHtml(rev.review)));
-    var delBtn = el('button','btn btn-outline btn-sm','삭제');
-    delBtn.type = 'button';
-    delBtn.addEventListener('click', function(){
-      if(!confirm('이 댓글을 삭제할까요?')) return;
-      teamApi('/review/delete', {
-        method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ placeId: placeId, id: rev.id })
-      }).then(function(){ item.remove(); })
-        .catch(function(err){ alert('삭제 실패: ' + err.message); });
-    });
-    meta.appendChild(delBtn);
+    // 삭제 버튼은 이 댓글을 남긴 그 기기(브라우저)에서만 보여준다 — 서버(worker)도 authorToken을
+    // 대조해서 한 번 더 막아준다(CBT에서 "누구나 남의 댓글을 지울 수 있다"는 문제가 발견됨).
+    if(rev.isOwn){
+      var delBtn = el('button','btn btn-outline btn-sm','삭제');
+      delBtn.type = 'button';
+      delBtn.addEventListener('click', function(){
+        showConfirm('이 댓글을 삭제할까요?', function(){
+          teamApi('/review/delete', {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({ placeId: placeId, id: rev.id, authorToken: getDeviceId() })
+          }).then(function(){ item.remove(); })
+            .catch(function(err){ showAlert('삭제 실패: ' + err.message); });
+        });
+      });
+      meta.appendChild(delBtn);
+    }
     item.appendChild(meta);
     return item;
   }
@@ -2209,7 +2308,7 @@
         copyToClipboard(data.code).then(function(){
           copyBtn.textContent = '복사됨!';
           setTimeout(function(){ copyBtn.textContent = '복사'; }, 1500);
-        }).catch(function(){ alert('복사에 실패했어요. 코드를 직접 선택해 복사해주세요: ' + data.code); });
+        }).catch(function(){ showAlert('복사에 실패했어요. 코드를 직접 선택해 복사해주세요: ' + data.code); });
       });
       display.appendChild(copyBtn);
       body.appendChild(display);
@@ -2246,13 +2345,13 @@
     });
     actions.appendChild(joinBtn);
     body.appendChild(actions);
-    openModal('멤버 참여하기', body);
-    input.focus();
+    openModal('멤버 참여하기', body); // openModal이 body 안 첫 입력 요소(input)로 이미 포커스를 옮겨준다
   }
 
   function enterTeamRoom(code, memberId, name, isHost){
     teamState.code = code; teamState.memberId = memberId; teamState.memberName = name; teamState.isHost = isHost;
     teamState.myExcluded = { type:[], cuisine:[] };
+    teamState.lastSubmitted = null;
     // 팀 반경도 하나의 조건값이지만, 아예 처음부터 고르게 하기보단 이미 개인 모드에서 골라둔
     // 반경(state.radiusM)을 기본값으로 깔아준다 — 어차피 취향이 같은 사람일 확률이 높음.
     teamState.myRadius = state.radiusM || CONFIG.DEFAULT_RADIUS_M;
@@ -2265,7 +2364,7 @@
   }
   function leaveTeamRoom(){
     if(teamState.pollTimer){ clearInterval(teamState.pollTimer); teamState.pollTimer = null; }
-    teamState = { code:null, memberId:null, memberName:null, isHost:false, members:[], result:null, myExcluded:{type:[],cuisine:[]}, myRadius:CONFIG.DEFAULT_RADIUS_M, pollTimer:null };
+    teamState = { code:null, memberId:null, memberName:null, isHost:false, members:[], result:null, myExcluded:{type:[],cuisine:[]}, myRadius:CONFIG.DEFAULT_RADIUS_M, lastSubmitted:null, pollTimer:null };
     storageSet('team', null);
     $('teamActionsInit').hidden = false;
     $('teamRoomBody').hidden = true;
@@ -2326,11 +2425,17 @@
     return { pairs: [], excludedMembers: members };
   }
 
+  // 개인 모드 칩(기본 비활성=제약 없음, 클릭하면 채워져서 "포함")과 이 팀 모드 칩(기본
+  // 전체 허용, 클릭하면 "제외")은 기능이 서로 반대다. CBT에서 이 둘이 똑같이 "칠해진 칩"으로
+  // 보여서 혼동된다는 문제가 나와, 기본(=제약 없음) 상태는 개인 모드의 미선택 칩과 똑같은
+  // 중립적 모양(흰 배경)으로 두고, 실제로 사용자가 뭔가를 "제외"했을 때만(.off) 시각적으로
+  // 눈에 띄게(회색+취소선) 바꾼다 — "칠해진 칩=내가 원하는 것"이라는 개인 모드의 시각 언어를
+  // 팀 모드에서 반대 의미로 재사용하지 않도록.
   function renderTeamConditionChips(group, options){
     var wrap = el('div','chips');
     options.forEach(function(opt){
       var isOff = teamState.myExcluded[group].indexOf(opt) !== -1;
-      var chip = el('button','chip team-chip'+(isOff?' off':' active'), opt);
+      var chip = el('button','chip team-chip'+(isOff?' off':''), opt);
       chip.type='button';
       chip.addEventListener('click', function(){
         var idx = teamState.myExcluded[group].indexOf(opt);
@@ -2418,9 +2523,20 @@
     wrap.appendChild(el('div','group-label','형태 (클릭하면 제외돼요, 기본은 전체 허용)'));
     var g1 = el('div','team-condition-group'); g1.appendChild(renderTeamConditionChips('type', TYPE_OPTIONS));
     wrap.appendChild(g1);
-    wrap.appendChild(el('div','group-label','종류'));
+    wrap.appendChild(el('div','group-label','종류 (클릭하면 제외돼요, 기본은 전체 허용)'));
     var g2 = el('div','team-condition-group'); g2.appendChild(renderTeamConditionChips('cuisine', CUISINE_OPTIONS));
     wrap.appendChild(g2);
+
+    // 조건/반경을 "준비 완료" 제출 이후에 또 만졌는데 재제출을 안 하면, 다른 멤버 화면엔
+    // 여전히 옛 조건으로 "준비완료"라고 보이고 방장이 그 상태로 추천을 돌릴 수 있다(CBT에서
+    // 발견) — 그래서 마지막 제출값과 지금 편집 중인 값이 다르면 눈에 띄게 알려준다.
+    var changedSinceSubmit = teamState.lastSubmitted && (
+      JSON.stringify(teamState.myExcluded) !== JSON.stringify(teamState.lastSubmitted.excluded) ||
+      teamState.myRadius !== teamState.lastSubmitted.radius
+    );
+    if(changedSinceSubmit){
+      wrap.appendChild(el('div','team-notice','⚠️ 조건을 바꿨어요 — 다시 "준비 완료"를 눌러야 팀 추천에 반영돼요.'));
+    }
 
     var foot = el('div','team-foot');
     var readyBtn = el('button','btn primary','준비 완료'); readyBtn.type='button'; readyBtn.style.flex='none';
@@ -2441,7 +2557,10 @@
     teamApi('/room/update', {
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({ code: teamState.code, memberId: teamState.memberId, excluded: teamState.myExcluded, radius: teamState.myRadius, ready: true })
-    }).then(pollTeamRoom).catch(function(err){ alert('조건 제출에 실패했어요: ' + err.message); });
+    }).then(function(){
+      teamState.lastSubmitted = { excluded: JSON.parse(JSON.stringify(teamState.myExcluded)), radius: teamState.myRadius };
+      return pollTeamRoom();
+    }).catch(function(err){ showAlert('조건 제출에 실패했어요: ' + err.message); });
   }
 
   // 팀 추천 계산은 호스트 브라우저의 state.restaurants(호스트 자신의 반경 검색 결과)를
@@ -2498,13 +2617,15 @@
       teamState.result = result;
       renderTeamRoom();
       if(chosen) highlightResult(chosen);
-    }).catch(function(err){ alert('추천 결과 저장에 실패했어요: ' + err.message); });
+    }).catch(function(err){ showAlert('추천 결과 저장에 실패했어요: ' + err.message); });
   }
 
   // ============ 부트스트랩 ============
   function init(){
     state.recentIds = [];
     state.skippedRestaurantIds = [];
+    state.loading = true;
+    updateLoadingUi();
     // 공유 제외/포함 상태 조회는 카카오 검색과 별개 요청이라 병렬로 진행한다(실패해도 빈
     // 객체로 폴백하므로 카카오 검색 성공/실패 분기와 경쟁 상태 없이 항상 값이 채워진 뒤 merge됨).
     var overridesPromise = fetchSharedOverrides().then(function(shared){ state.sharedOverrides = shared; });
@@ -2513,6 +2634,7 @@
       .then(function(results){
         var res = results[1];
         state.mode = 'live';
+        state.loading = false;
         hideFallbackBanner();
         setRestaurants(res.list);
         renderAll(res.officeCoord);
@@ -2522,6 +2644,7 @@
         console.warn('[lunch-recommender] 카카오 라이브 검색 실패, 예시 데이터로 대체합니다:', err && err.message);
         state.mode = 'seed';
         state.searchIncomplete = false;
+        state.loading = false;
         showFallbackBanner();
         setRestaurants(getSeedRestaurants());
         renderAll(null);
@@ -2542,6 +2665,31 @@
   // 여기 하나로 모아서 다룬다(카메라 촬영 vs 기존 사진 불러오기를 각 브라우저의 <input capture>
   // 처리 방식 차이 없이 명시적으로 구분해서 제공하기 위함).
   var uploadPhotoFile = null;
+
+  // Ctrl+V(클립보드 붙여넣기)뿐 아니라 클릭해서 파일을 직접 선택하는 경로도 열어둔다 —
+  // 클립보드 사용법을 모르는 사용자나 키보드 전용 사용자를 위한 대체 수단이 전혀 없다는
+  // 문제가 CBT에서 발견됨. onFile(file)에는 실제 리사이즈/업로드 처리를 호출부가 넣는다.
+  function wirePasteOrClickZone(zone, onFile){
+    zone.addEventListener('paste', function(e){
+      var items = (e.clipboardData && e.clipboardData.items) || [];
+      var imageItem = null;
+      for(var i=0;i<items.length;i++){
+        if(items[i].type && items[i].type.indexOf('image/') === 0){ imageItem = items[i]; break; }
+      }
+      if(!imageItem) return;
+      e.preventDefault();
+      var file = imageItem.getAsFile();
+      if(file) onFile(file);
+    });
+    var fileInput = el('input'); fileInput.type = 'file'; fileInput.accept = 'image/*'; fileInput.hidden = true;
+    zone.appendChild(fileInput);
+    zone.addEventListener('click', function(){ fileInput.click(); });
+    fileInput.addEventListener('change', function(){
+      var file = fileInput.files[0];
+      fileInput.value = '';
+      if(file) onFile(file);
+    });
+  }
 
   function resizeImageFile(file, maxDim, quality){
     return new Promise(function(resolve, reject){
@@ -2600,7 +2748,7 @@
       .then(function(photoDataUrl){
         return teamApi('/review/add', {
           method:'POST', headers:{'Content-Type':'application/json'},
-          body: JSON.stringify({ placeId: params.placeId, name: params.name, photo: photoDataUrl, review: reviewText })
+          body: JSON.stringify({ placeId: params.placeId, name: params.name, photo: photoDataUrl, review: reviewText, authorToken: getDeviceId() })
         });
       })
       .then(function(){
@@ -2648,7 +2796,22 @@
     $('photoLightboxCloseBtn').addEventListener('click', closePhotoLightbox);
     $('photoLightboxOverlay').addEventListener('click', function(e){ if(e.target !== $('photoLightboxCloseBtn')) closePhotoLightbox(); });
     document.addEventListener('keydown', function(e){
-      if(e.key === 'Escape' && !$('photoLightboxOverlay').hidden) closePhotoLightbox();
+      if(e.key === 'Escape'){
+        if(!$('photoLightboxOverlay').hidden) closePhotoLightbox();
+        else if(!$('modalOverlay').hidden) closeModal();
+        return;
+      }
+      // 팀 초대/참여 등 일반 모달에 열려 있는 동안엔 Tab이 배경 요소로 새지 않도록 모달
+      // 안에서만 순환시킨다(CBT에서 포커스 트랩이 없다는 문제가 발견됨).
+      if(e.key === 'Tab' && !$('modalOverlay').hidden){
+        var focusables = Array.prototype.slice.call(
+          $('modalOverlay').querySelectorAll('button, a[href], input, textarea, select, [tabindex]:not([tabindex="-1"])')
+        ).filter(function(node){ return !node.disabled && node.offsetParent !== null; });
+        if(focusables.length === 0) return;
+        var first = focusables[0], last = focusables[focusables.length - 1];
+        if(e.shiftKey && document.activeElement === first){ e.preventDefault(); last.focus(); }
+        else if(!e.shiftKey && document.activeElement === last){ e.preventDefault(); first.focus(); }
+      }
     });
     restoreTeamSession();
   });

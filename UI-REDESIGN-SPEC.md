@@ -70,7 +70,7 @@ body { font-family: Pretendard, -apple-system, BlinkMacSystemFont, system-ui, sa
 | 페이지 타이틀 | 26px / 600 / `--text` |
 | 페이지 서브 | 13px / 400 / `--text-muted` |
 | 섹션 라벨 (조건, 지도) | 12px / 600 / `--text-muted` / `letter-spacing:.04em` / uppercase |
-| 그룹 라벨 (형태, 맛, 종류) | 11px / 500 / `--text-faint` |
+| 그룹 라벨 (형태, 종류) | 11px / 500 / `--text-faint` |
 | 키커 ("추천메뉴") | 10px / 700 / `--accent` / `letter-spacing:.08em` / uppercase |
 | 식당명 (결과) | 30px / 600 / `--text` |
 | 식당 메타 | 12px / 400 / `--text-muted` |
@@ -104,10 +104,9 @@ body { font-family: Pretendard, -apple-system, BlinkMacSystemFont, system-ui, sa
 
 ### 4.2 조건 패널 (좌)
 - 배경 `--surface`, 테두리 `--border-soft`, radius `--r-lg`, padding 20px, `flex-column; gap:16px`.
-- 섹션 라벨 "조건" → 그룹 3개:
+- 섹션 라벨 "조건" → 그룹 2개(맛 필터는 2026-09-18 제거 — 사람마다 "매운맛" 기준이 달라 필터로서 의미가 없다는 피드백에 따름):
   - **형태**: 면 / 밥 / 국물 / 구이 / 튀김 / 분식 / 기타
-  - **맛**: 매운맛 / 순한맛 / 보통
-  - **종류**: 한식 / 중식 / 일식 / 양식 / 카페-디저트 / 기타
+  - **종류**: 구내식당/한식뷔페 · 국밥/탕/찌개 · 제육/백반/정식 · 중식 · 면류/분식 · 돈까스/일식/양식 · 아시안/세계요리 · 간편식/식단관리
 - 칩은 **멀티 셀렉트, 전부 선택사항**. 아무것도 안 고르면 전체 후보 대상.
 - 칩 스타일:
   - 비활성: `background:#fff; color:var(--text-body); border:1px solid var(--border); padding:7px 14px; border-radius:var(--r-pill);`

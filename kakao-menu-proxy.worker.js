@@ -667,6 +667,10 @@ async function handleAddReview(request, env) {
     name: typeof body.name === 'string' ? body.name.slice(0, 100) : '',
     review,
     photo,
+    // 로그인이 없는 앱이라 이 기기(브라우저)를 식별하는 익명 토큰만으로 "본인 글" 여부를
+    // 판단한다(handleDeleteReview 참고) — CBT에서 "누구나 남의 댓글을 지울 수 있다"는 문제가
+    // 발견돼 추가함.
+    authorToken: typeof body.authorToken === 'string' ? body.authorToken.slice(0, 100) : '',
     createdAt: Date.now(),
   };
   await env.REVIEWS.put(reviewKey(record.placeId, id), JSON.stringify(record));
@@ -677,6 +681,7 @@ async function handleListReviews(url, env) {
   if (!env.REVIEWS) return json({ error: 'REVIEWS KV 바인딩이 설정되지 않았습니다.' }, 500);
   const placeId = (url.searchParams.get('placeId') || '').trim();
   if (!placeId) return json({ error: 'placeId 쿼리 파라미터가 필요합니다.' }, 400);
+  const viewerToken = (url.searchParams.get('viewerToken') || '').trim();
 
   // KV list()는 기본적으로 한 번에 최대 1000개 키까지만 반환한다(개인용 앱에서 가게 하나에
   // 댓글이 그만큼 쌓일 일은 없어서 페이지네이션은 생략).
@@ -684,8 +689,14 @@ async function handleListReviews(url, env) {
   const reviews = await Promise.all(
     listed.keys.map((k) => env.REVIEWS.get(k.name).then((raw) => (raw ? JSON.parse(raw) : null)))
   );
+  // authorToken 원본은 남에게 그대로 보여줄 필요가 없는 값이라(다른 사람이 그대로 베껴서
+  // 자기 것처럼 흉내낼 수 있음), "이 댓글이 지금 보는 사람(viewerToken) 것인지" boolean만
+  // 내려주고 원본 토큰은 응답에서 뺀다.
+  const shaped = reviews
+    .filter(Boolean)
+    .map(({ authorToken, ...rest }) => ({ ...rest, isOwn: !!viewerToken && authorToken === viewerToken }));
   return json(
-    { placeId, reviews: reviews.filter(Boolean).sort((a, b) => b.createdAt - a.createdAt) },
+    { placeId, reviews: shaped.sort((a, b) => b.createdAt - a.createdAt) },
     200,
     { 'Cache-Control': 'no-store' }
   );
@@ -695,7 +706,17 @@ async function handleDeleteReview(request, env) {
   if (!env.REVIEWS) return json({ error: 'REVIEWS KV 바인딩이 설정되지 않았습니다.' }, 500);
   const body = await request.json().catch(() => null);
   if (!body || !body.placeId || !body.id) return json({ error: '잘못된 요청입니다.' }, 400);
-  await env.REVIEWS.delete(reviewKey(String(body.placeId), String(body.id)));
+  const key = reviewKey(String(body.placeId), String(body.id));
+  const raw = await env.REVIEWS.get(key);
+  if (!raw) return json({ ok: true }); // 이미 삭제된 경우도 성공으로 취급(멱등)
+  const record = JSON.parse(raw);
+  const authorToken = typeof body.authorToken === 'string' ? body.authorToken : '';
+  // 이 기능 추가 이전에 저장된(authorToken이 없는) 옛 댓글은 작성자를 확인할 방법이 없어
+  // 아무도 지울 수 없게 된다 — "누구나 삭제 가능"보다는 안전한 쪽으로의 트레이드오프.
+  if (!record.authorToken || record.authorToken !== authorToken) {
+    return json({ error: '본인이 남긴 댓글만 삭제할 수 있어요.' }, 403);
+  }
+  await env.REVIEWS.delete(key);
   return json({ ok: true });
 }
 
