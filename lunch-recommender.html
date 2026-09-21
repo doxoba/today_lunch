@@ -1284,6 +1284,18 @@
       return undefined;
     });
   }
+  // "정보 편집" 패널을 열 때 요일 5칸 각각 이번 주에 이미 등록됐는지 한 번에 확인한다. 위
+  // fetchCafeteriaWeeklyPhotoFor는 "오늘 요일"만 알려주기 때문에, 오늘이 아닌 날 편집 패널을
+  // 다시 열면 이미 등록해둔 칸도 빈 것처럼 보여 확인할 방법이 없었다(실사용 중 발견).
+  function fetchCafeteriaWeeklyStatusFor(placeId){
+    if(!CONFIG.TEAM_API_BASE || !placeId) return Promise.resolve(null);
+    return teamApi('/cafeteria/weekly-status?placeId=' + encodeURIComponent(placeId)).then(function(data){
+      return (data && data.days) ? data.days : null;
+    }).catch(function(err){
+      console.warn('[lunch-recommender] 주간 식단표 등록 현황 조회 실패 (placeId=' + placeId + '):', err && err.message);
+      return null;
+    });
+  }
   function uploadCafeteriaWeeklyPhoto(placeId, weekday, photoDataUrl){
     return teamApi('/cafeteria/weekly-upload', {
       method:'POST', headers:{'Content-Type':'application/json'},
@@ -1908,12 +1920,14 @@
     form.appendChild(el('label', null, '주간 식단표 (선택 — 한 주치 사진을 요일별로 잘라서 각 칸에 Ctrl+V, 인스타그램처럼 주 단위로만 올리는 식당용)'));
     var weeklyGrid = el('div', 'cafeteria-weekly-grid');
     form.appendChild(weeklyGrid);
+    var weeklyStatusEls = {};
     CAFETERIA_WEEKDAY_LABELS.forEach(function(w){
       var weekday = w[0], label = w[1];
       var slot = el('div', 'cafeteria-weekly-slot');
       var zone = el('div', 'cafeteria-paste-zone small', label);
       zone.tabIndex = 0;
       var status = el('div', 'cafeteria-paste-status');
+      weeklyStatusEls[weekday] = status;
       slot.appendChild(zone);
       slot.appendChild(status);
       weeklyGrid.appendChild(slot);
@@ -1923,7 +1937,7 @@
         resizeImageFile(file, CONFIG.REVIEW_PHOTO_MAX_DIM, CONFIG.REVIEW_PHOTO_QUALITY)
           .then(function(photoDataUrl){ return uploadCafeteriaWeeklyPhoto(r.id, weekday, photoDataUrl); })
           .then(function(){
-            status.textContent = label + '요일 등록됨';
+            status.textContent = '✅ 이번 주 등록됨';
             saveOverride(r.id, { cafeteriaWeeklyEnabled: true });
             r.cafeteriaWeeklyEnabled = true;
             // 방금 채운 칸이 오늘 요일이면 바로 반영, 아니면(다른 요일 칸이면) 조용히
@@ -1934,6 +1948,18 @@
             });
           })
           .catch(function(err){ status.textContent = '업로드 실패: ' + err.message; });
+      });
+    });
+    // 오늘이 아닌 요일 칸도 이번 주에 이미 등록해뒀는지 바로 보이도록, 패널을 열 때 5칸
+    // 전체의 등록 여부를 한 번에 조회해 표시한다(실사용 중 "오늘 날짜가 아니면 등록됐는지
+    // 알 수 없다"는 문제가 발견됨).
+    fetchCafeteriaWeeklyStatusFor(r.id).then(function(days){
+      if(!days) return;
+      CAFETERIA_WEEKDAY_LABELS.forEach(function(w){
+        var weekday = w[0];
+        if(days[weekday] && weeklyStatusEls[weekday] && !weeklyStatusEls[weekday].textContent){
+          weeklyStatusEls[weekday].textContent = '✅ 이번 주 등록됨';
+        }
       });
     });
 

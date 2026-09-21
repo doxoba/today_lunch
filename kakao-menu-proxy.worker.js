@@ -138,6 +138,13 @@ export default {
     if (url.pathname === '/cafeteria/weekly' && request.method === 'GET') {
       return handleGetCafeteriaWeeklyPhoto(url, env);
     }
+    // "정보 편집" 패널에서 요일 5칸의 등록 여부를 한 번에 보여주기 위한 조회. 위 /cafeteria/weekly는
+    // "오늘 요일"만 확인하는 용도라, 오늘이 아닌 날짜에 편집 패널을 다시 열면 이미 등록해둔 칸도
+    // 빈 것처럼 보여 등록 여부를 확인할 수 없는 문제가 있었다(실사용 중 발견) — 이 라우트는 요일
+    // 전체를 한 번에 반환한다.
+    if (url.pathname === '/cafeteria/weekly-status' && request.method === 'GET') {
+      return handleGetCafeteriaWeeklyStatus(url, env);
+    }
 
     const placeId = url.searchParams.get('placeId');
 
@@ -839,6 +846,25 @@ async function handleGetCafeteriaWeeklyPhoto(url, env) {
     200,
     { 'Cache-Control': 'no-store' }
   );
+}
+
+// 요일 5칸 전체의 "이번 주에 등록됐는지" 여부만 가볍게 반환한다(사진 자체는 안 내려줌 — 이건
+// 등록 여부 표시용이라 이미지 데이터까지 옮길 필요가 없다).
+async function handleGetCafeteriaWeeklyStatus(url, env) {
+  if (!env.REVIEWS) return json({ error: 'REVIEWS KV 바인딩이 설정되지 않았습니다.' }, 500);
+  const placeId = (url.searchParams.get('placeId') || '').trim();
+  if (!placeId) return json({ error: 'placeId 쿼리 파라미터가 필요합니다.' }, 400);
+
+  const weekOf = getKstMondayDateString();
+  const days = {};
+  await Promise.all(
+    CAFETERIA_WEEKDAYS.map(async (weekday) => {
+      const raw = await env.REVIEWS.get(cafeteriaWeeklyKey(placeId, weekday));
+      const record = raw ? JSON.parse(raw) : null;
+      days[weekday] = !!(record && record.weekOf === weekOf);
+    })
+  );
+  return json({ weekOf, days }, 200, { 'Cache-Control': 'no-store' });
 }
 
 // 네이버 place 메뉴 페이지(SSR)를 가져와 __APOLLO_STATE__에서 메뉴 항목을 추출한다.
