@@ -1187,15 +1187,18 @@
   // 기록해둔 값이다(kakao-menu-proxy.worker.js의 applyCafeteriaChangeTracking 참고). 그래도
   // 100% 정확하다는 보장은 없지만(같은 사진을 재업로드하면 새 사진으로 오인할 수 있는 등), 카카오
   // 원본 필드보다는 신뢰도가 높다.
-  // source==='post'면 카카오톡 채널 "소식"(포스트) 제목의 날짜가 이미 오늘(KST)과 일치하는
-  // 것까지 Worker가 확인하고 내려준 것이라(kakao-menu-proxy.worker.js의 pickTodayCafeteriaPost
-  // 참고), profileUpdatedAt 기반의 애매한 판단 없이 곧바로 "오늘 것"으로 취급한다.
+  // 'post'(제목의 날짜가 오늘과 정확히 일치)와 'post-guess'(정확한 날짜 표기가 없어 '오늘'/
+  // '메뉴'/숫자 키워드 점수로 추정 — kakao-menu-proxy.worker.js의 pickCafeteriaPostByKeywordScore
+  // 참고) 둘 다 "소식" 포스트 경로 결과라 같은 취급을 받는 곳이 많아 헬퍼로 묶는다.
+  function isCafeteriaPostSource(source){
+    return source === 'post' || source === 'post-guess';
+  }
   function isCafeteriaImageFromToday(cafeteriaMenuImage){
     if(!cafeteriaMenuImage) return false;
-    // 'post'(채널 소식 제목의 날짜가 오늘과 일치), 'manual'(Worker가 오늘 날짜인 것만
+    // 'post'/'post-guess'(채널 소식 포스트에서 찾음), 'manual'(Worker가 오늘 날짜인 것만
     // found:true로 내려줌), 'weekly'(Worker가 이번 주 월요일 날짜까지 확인해서 내려줌)는
-    // 셋 다 이미 오늘 것임이 보장돼 있어 애매한 판단이 필요 없다.
-    if(cafeteriaMenuImage.source === 'post' || cafeteriaMenuImage.source === 'manual' || cafeteriaMenuImage.source === 'weekly') return true;
+    // 넷 다 이미 오늘 것임이 보장돼 있어 애매한 판단이 필요 없다.
+    if(isCafeteriaPostSource(cafeteriaMenuImage.source) || cafeteriaMenuImage.source === 'manual' || cafeteriaMenuImage.source === 'weekly') return true;
     if(!cafeteriaMenuImage.profileUpdatedAt) return false;
     var updated = new Date(cafeteriaMenuImage.profileUpdatedAt);
     var now = new Date();
@@ -1216,6 +1219,9 @@
     if(cafeteriaMenuImage.source === 'post'){
       return '✅ "' + cafeteriaMenuImage.postTitle + '" 소식에서 오늘자 메뉴를 찾았어요.';
     }
+    if(cafeteriaMenuImage.source === 'post-guess'){
+      return '🔎 "' + cafeteriaMenuImage.postTitle + '" 소식에서 오늘자 메뉴로 추정했어요.';
+    }
     if(isCafeteriaImageFromToday(cafeteriaMenuImage)){
       return '오늘(' + new Date(cafeteriaMenuImage.profileUpdatedAt).toLocaleDateString('ko-KR') + ') 사진이 바뀐 걸 확인했어요.';
     }
@@ -1228,7 +1234,7 @@
     var all = storageGet('cafeteriaImageCache', {});
     var entry = all[channelId];
     if(!entry) return undefined;
-    var ttl = (entry.data && entry.data.source === 'post') ? CONFIG.CAFETERIA_POST_IMAGE_CACHE_TTL_MS : CONFIG.CAFETERIA_IMAGE_CACHE_TTL_MS;
+    var ttl = (entry.data && isCafeteriaPostSource(entry.data.source)) ? CONFIG.CAFETERIA_POST_IMAGE_CACHE_TTL_MS : CONFIG.CAFETERIA_IMAGE_CACHE_TTL_MS;
     if((Date.now() - entry.ts) > ttl) return undefined;
     return entry.data;
   }
