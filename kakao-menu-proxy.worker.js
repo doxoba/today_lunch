@@ -669,13 +669,40 @@ async function handleSetResult(request, env) {
   return json({ ok: true });
 }
 
-// ============ 가게별 자동/포함/제외(manualOverride) 공유 상태 (Cloudflare KV) ============
+// ============ 가게별 공유 편집 상태 (자동/포함/제외 + 종류/메뉴/채널ID 등) (Cloudflare KV) ============
 // review:와 같은 REVIEWS KV를 재사용한다(추가 바인딩 불필요). 만료 없이 영구 저장 — 폐업 등
-// 사실 정보라 TTL로 자동 소멸시키면 안 된다. "자동"은 값을 저장하지 않고 키를 지우는 것으로
-// 표현한다(다른 값이 계속 남는 것보다, 전부 지운 상태 = 진짜 아무도 안 건드린 상태와 같아지는
-// 쪽이 더 단순함).
+// 사실 정보라 TTL로 자동 소멸시키면 안 된다.
+// 2026-09-21: 원래 manualOverride(자동/포함/제외)만 공유했는데, 한 사람이 "정보 편집"에서
+// 애써 입력한 실제 메뉴/카카오톡 채널ID/네이버 place id를 다른 사람은 전혀 못 보고 매번 처음부터
+// 다시 입력해야 하는 문제가 있어 같은 저장소·같은 원칙(로그인 없음 → 작성자 구분 없이 누구나
+// 덮어쓸 수 있음)으로 나머지 편집 필드도 함께 공유하도록 확장했다. 필드 하나를 지우고 싶으면
+// patch에 그 필드를 null로 보낸다(다른 필드는 그대로 유지) — 레코드에 남은 필드가 하나도
+// 없어지면 키 자체를 지운다(진짜 아무도 안 건드린 상태와 같아지는 쪽이 더 단순함).
+const OVERRIDE_SHARED_FIELDS = [
+  'manualOverride', 'cuisine', 'menuItems', 'menuSource', 'edited',
+  'cafeteriaChannelId', 'naverPlaceId', 'cafeteriaManualEnabled', 'cafeteriaWeeklyEnabled',
+];
 function overrideKey(placeId) { return 'override:' + placeId; }
 function overridePrefix() { return 'override:'; }
+
+function isValidOverrideFieldValue(field, value) {
+  switch (field) {
+    case 'manualOverride':
+    case 'edited':
+    case 'cafeteriaManualEnabled':
+    case 'cafeteriaWeeklyEnabled':
+      return typeof value === 'boolean';
+    case 'cuisine':
+    case 'menuSource':
+    case 'cafeteriaChannelId':
+    case 'naverPlaceId':
+      return typeof value === 'string';
+    case 'menuItems':
+      return Array.isArray(value);
+    default:
+      return false;
+  }
+}
 
 async function handleListOverrides(env) {
   if (!env.REVIEWS) return json({ error: 'REVIEWS KV 바인딩이 설정되지 않았습니다.' }, 500);
@@ -686,11 +713,13 @@ async function handleListOverrides(env) {
   );
   const overrides = {};
   entries.filter(Boolean).forEach((e) => {
-    overrides[e.placeId] = { manualOverride: e.manualOverride, updatedAt: e.updatedAt };
+    overrides[e.placeId] = e;
   });
   return json({ overrides }, 200, { 'Cache-Control': 'no-store' });
 }
 
+// 옛 클라이언트 호환: 예전엔 {placeId, manualOverride}만 보냈다. 새 클라이언트는
+// {placeId, patch:{...}} 형태로 여러 필드를 한 번에 보낼 수 있다.
 async function handleSetOverride(request, env) {
   if (!env.REVIEWS) return json({ error: 'REVIEWS KV 바인딩이 설정되지 않았습니다.' }, 500);
 
@@ -699,16 +728,41 @@ async function handleSetOverride(request, env) {
     return json({ error: '잘못된 요청입니다 (placeId 필요).' }, 400);
   }
   const placeId = String(body.placeId);
+  const patch = (body.patch && typeof body.patch === 'object') ? body.patch : { manualOverride: body.manualOverride };
 
-  if (body.manualOverride === null) {
-    await env.REVIEWS.delete(overrideKey(placeId));
+  // 요청 하나가 편집 데이터를 무한정 담아 KV를 낭비하는 걸 막는 최소한의 안전장치(리뷰 사진
+  // 3MB 상한에 비하면 이 편집 데이터는 훨씬 작아야 정상이라 20KB로 넉넉히 잡음).
+  if (JSON.stringify(patch).length > 20000) {
+    return json({ error: '편집 데이터가 너무 큽니다.' }, 413);
+  }
+
+  for (const field of OVERRIDE_SHARED_FIELDS) {
+    if (!(field in patch)) continue;
+    if (patch[field] === null) continue; // 필드 삭제 요청 — 값 검증 불필요
+    if (!isValidOverrideFieldValue(field, patch[field])) {
+      return json({ error: field + ' 값 형식이 올바르지 않습니다.' }, 400);
+    }
+  }
+
+  const key = overrideKey(placeId);
+  const raw = await env.REVIEWS.get(key);
+  const existing = raw ? JSON.parse(raw) : {};
+
+  OVERRIDE_SHARED_FIELDS.forEach((field) => {
+    if (!(field in patch)) return;
+    if (patch[field] === null) delete existing[field];
+    else existing[field] = patch[field];
+  });
+
+  const hasContent = OVERRIDE_SHARED_FIELDS.some((field) => field in existing);
+  if (!hasContent) {
+    await env.REVIEWS.delete(key);
     return json({ ok: true });
   }
-  if (typeof body.manualOverride !== 'boolean') {
-    return json({ error: 'manualOverride는 true/false/null 중 하나여야 합니다.' }, 400);
-  }
-  const record = { placeId, manualOverride: body.manualOverride, updatedAt: Date.now() };
-  await env.REVIEWS.put(overrideKey(placeId), JSON.stringify(record));
+
+  existing.placeId = placeId;
+  existing.updatedAt = Date.now();
+  await env.REVIEWS.put(key, JSON.stringify(existing));
   return json({ ok: true });
 }
 

@@ -838,12 +838,16 @@
     return all[id];
   }
 
-  // ============ 자동/포함/제외(manualOverride) 공유 상태 (Cloudflare KV) ============
+  // ============ 가게별 공유 편집 상태 (자동/포함/제외 + 종류/메뉴/채널ID 등) (Cloudflare KV) ============
   // 실제로 없어진 상점인데 사장님이 폐업 등록을 안 해 카카오에 계속 남아있는 경우처럼, 한 사람이
-  // "제외"하면 그 정보를 전원이 똑같이 봐야 유용하다. 그래서 이 값만은 localStorage가 아니라
-  // Worker의 공유 저장소(KV)가 정답이고, state.sharedOverrides에 담아 mergeRecord에서 로컬
-  // overrides.manualOverride보다 우선한다(공유 저장소가 아직 모르는 식당만 로컬 값으로 폴백).
-  // 잘못 제외해도 아무나 "자동"/"포함"으로 되돌릴 수 있으므로 접근 권한은 따로 두지 않는다.
+  // "제외"하면 그 정보를 전원이 똑같이 봐야 유용하다. manualOverride로 시작했지만, 2026-09-21에
+  // cuisine/menuItems/naverPlaceId/cafeteriaChannelId 등 "정보 편집"의 나머지 편집 필드도 같은
+  // 이유로(한 사람이 애써 입력한 걸 다른 사람이 또 입력하지 않게) 같은 저장소로 확장했다 — 로그인이
+  // 없어 작성자 구분이 안 되므로 manualOverride와 동일하게 접근 권한은 따로 두지 않는다. 이 값들은
+  // localStorage가 아니라 Worker의 공유 저장소(KV)가 정답이고, state.sharedOverrides에 담아
+  // mergeRecord에서 필드별로 로컬 overrides보다 우선한다(공유 저장소가 아직 모르는 필드만 로컬
+  // 값으로 폴백 — OVERRIDE_SHARED_FIELDS 참고).
+  var OVERRIDE_SHARED_FIELDS = ['manualOverride','cuisine','menuItems','menuSource','edited','cafeteriaChannelId','naverPlaceId','cafeteriaManualEnabled','cafeteriaWeeklyEnabled'];
   function fetchSharedOverrides(){
     if(!CONFIG.TEAM_API_BASE) return Promise.resolve({});
     return fetch(CONFIG.TEAM_API_BASE + '/overrides').then(function(res){
@@ -851,17 +855,48 @@
       return res.json();
     }).then(function(data){ return (data && data.overrides) || {}; })
       .catch(function(err){
-        console.warn('[lunch-recommender] 공유 제외/포함 상태 조회 실패 (로컬 값으로 폴백):', err && err.message);
+        console.warn('[lunch-recommender] 공유 편집 상태 조회 실패 (로컬 값으로 폴백):', err && err.message);
         return {};
       });
   }
-  function saveSharedOverride(placeId, manualOverride){
+  // patch에 담긴 필드만 서버 쪽 레코드에 병합된다(다른 필드는 그대로 유지) — null을 주면 그
+  // 필드만 삭제된다. 여러 호출 지점(자동/포함/제외 토글, 정보 편집 저장, 초기화 등)이 공유한다.
+  function saveSharedOverridePatch(placeId, patch){
     if(!CONFIG.TEAM_API_BASE) return Promise.resolve();
     return fetch(CONFIG.TEAM_API_BASE + '/overrides/set', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ placeId: placeId, manualOverride: manualOverride })
+      body: JSON.stringify({ placeId: placeId, patch: patch })
     }).then(function(res){ if(!res.ok) throw new Error('overrides set failed: ' + res.status); });
+  }
+  // 2026-09-21 이전부터 로컬(localStorage)에만 쌓여있던 편집분을 공유 저장소로 한 번만
+  // 옮긴다 — 안 옮기면 공유 저장소 우선 조회 때문에 이 기기에서 이미 입력해둔 내용이 다른
+  // 필드(예: manualOverride만 있는 식당)에 가려 갑자기 안 보이는 것처럼 느껴질 수 있다.
+  // 기기당 1회만 실행되도록 플래그를 두되, 실패(오프라인 등)했을 때는 플래그를 세우지 않아
+  // 다음 접속에서 다시 시도되게 한다.
+  function migrateLocalOverridesToShared(){
+    if(!CONFIG.TEAM_API_BASE) return Promise.resolve();
+    if(storageGet('overridesMigratedToShared', false)) return Promise.resolve();
+    var all = loadOverrides();
+    var ids = Object.keys(all);
+    var patches = ids.map(function(id){
+      var patch = {};
+      OVERRIDE_SHARED_FIELDS.forEach(function(field){
+        if(all[id][field] !== undefined) patch[field] = all[id][field];
+      });
+      return { id: id, patch: patch };
+    }).filter(function(p){ return Object.keys(p.patch).length > 0; });
+    if(!patches.length){ storageSet('overridesMigratedToShared', true); return Promise.resolve(); }
+    return Promise.all(patches.map(function(p){
+      return saveSharedOverridePatch(p.id, p.patch).catch(function(err){
+        console.warn('[lunch-recommender] 로컬 편집분 공유 이관 실패 (id=' + p.id + '):', err && err.message);
+        return 'failed';
+      });
+    })).then(function(results){
+      // 하나라도 실패했으면(오프라인 등) 다음 접속에서 통째로 재시도 — 이미 성공한 건 다시
+      // 보내도 덮어쓰기라 문제없다(멱등).
+      if(results.indexOf('failed') === -1) storageSet('overridesMigratedToShared', true);
+    });
   }
 
   function mergeRecord(raw, overrides){
@@ -870,29 +905,41 @@
     // 운영시간 조회는 메뉴 자동조회와 함께 나중에(enrichAndRefresh) 비동기로 도착하므로, 아직 안
     // 왔으면(raw.openHours === undefined) "판단 불가"로 보고 제외하지 않는다.
     var excludedByHours = isExcludedByLunchHours(raw.openHours);
-    // 자동/포함/제외는 공유 저장소(state.sharedOverrides)가 있으면 그 값이 항상 우선이고,
-    // 공유 저장소가 아직 모르는 식당(아무도 안 건드림)에 한해서만 로컬 편집값으로 폴백한다.
+    // OVERRIDE_SHARED_FIELDS 전체 공통: 공유 저장소(state.sharedOverrides)가 그 필드를 알면
+    // 항상 우선이고, 공유 저장소가 아직 모르는 필드에 한해서만 로컬 편집값으로 폴백한다(필드
+    // 단위 폴백 — 이 식당에 공유 필드가 하나라도 있다고 해서 나머지까지 전부 공유값 취급하지
+    // 않는다. 예: cuisine만 공유돼 있으면 naverPlaceId는 여전히 로컬 값을 본다).
     var sharedOverride = (state.sharedOverrides && state.sharedOverrides[raw.id]) || null;
-    var manualOverride = sharedOverride ? sharedOverride.manualOverride
-      : (('manualOverride' in saved) ? saved.manualOverride : null);
+    function pickField(field){
+      if(sharedOverride && field in sharedOverride) return sharedOverride[field];
+      if(field in saved) return saved[field];
+      return undefined;
+    }
+
+    var manualOverride = pickField('manualOverride');
+    if(manualOverride === undefined) manualOverride = null;
+
     // 종류 8분류 개편(2026-09-16) 이전에 저장된 편집분은 옛 taxonomy 값('한식' 등)을 그대로
     // 갖고 있을 수 있다. CUISINE_OPTIONS에 없는 값이면 무시하고 다시 추정한다 — 그대로 두면
     // 그 식당이 "종류" 필터의 어떤 칩을 골라도 안 걸리는(=계속 안 보이는) 조용한 문제가 생긴다.
-    var savedCuisineValid = saved.cuisine !== undefined && CUISINE_OPTIONS.indexOf(saved.cuisine) !== -1;
-    var cuisine = savedCuisineValid ? saved.cuisine : (raw.cuisine || inferCuisine(raw.categoryName, raw.name));
+    var pickedCuisine = pickField('cuisine');
+    var cuisine = (pickedCuisine !== undefined && CUISINE_OPTIONS.indexOf(pickedCuisine) !== -1)
+      ? pickedCuisine : (raw.cuisine || inferCuisine(raw.categoryName, raw.name));
 
-    // 메뉴 목록: 사용자가 직접 편집해뒀으면 그게 최우선, 없으면 자동조회(카카오/네이버) 결과,
-    // 그것도 없으면(아직 조회 전이거나 실패) 상호명 키워드로 대표메뉴 1개만 추정해서 최소한
-    // 빈 카드는 면한다.
+    // 메뉴 목록: 사용자가 직접 편집해뒀으면(공유 우선, 없으면 로컬) 그게 최우선, 없으면
+    // 자동조회(카카오/네이버) 결과, 그것도 없으면(아직 조회 전이거나 실패) 상호명 키워드로
+    // 대표메뉴 1개만 추정해서 최소한 빈 카드는 면한다.
+    var pickedMenuItems = pickField('menuItems');
     var menuItems;
-    if(saved.menuItems !== undefined){
-      menuItems = saved.menuItems;
+    if(pickedMenuItems !== undefined){
+      menuItems = pickedMenuItems;
     } else if(raw.menuItems && raw.menuItems.length){
       menuItems = raw.menuItems;
     } else {
       var guess = guessSignatureMenuName(raw.categoryName, raw.name);
       menuItems = guess ? [ Object.assign({ name: guess, price: null, isRecommend: true }, inferMenuTags(guess)) ] : [];
     }
+    var pickedMenuSource = pickField('menuSource');
 
     return {
       id: raw.id, source: raw.source, name: raw.name, categoryName: raw.categoryName || '',
@@ -906,30 +953,29 @@
       isIncluded: manualOverride === null ? (includedByGeometry && !excludedByHours) : manualOverride,
       cuisine: cuisine,
       menuItems: menuItems,
-      // menuItems만 저장하고 아직 자동조회 소스 표기가 없는 경우는 saved.menuSource를 우선한다
-      // (naverPlaceId 조회 결과를 그대로 저장한 경우가 여기 해당 — 사용자가 직접 타이핑한 게
-      // 아니므로 'manual'로 표시하면 안 됨). 메인 "저장" 버튼은 항상 menuSource:'manual'을
-      // 명시해서 저장한다.
-      menuSource: saved.menuSource || (saved.menuItems !== undefined ? 'manual' : (raw.menuSource || null)),
+      // menuItems만 있고 아직 자동조회 소스 표기가 없는 경우는 menuSource를 우선한다(naverPlaceId
+      // 조회 결과를 그대로 저장한 경우가 여기 해당 — 사용자가 직접 타이핑한 게 아니므로 'manual'로
+      // 표시하면 안 됨). 메인 "저장" 버튼은 항상 menuSource:'manual'을 명시해서 저장한다.
+      menuSource: pickedMenuSource || (pickedMenuItems !== undefined ? 'manual' : (raw.menuSource || null)),
       // 네이버 place id는 자동 매칭이 불가능해서(공식 검색 API가 place id 자체를 안 줌) 사용자가
       // "정보 편집"에서 직접 입력해둔 값만 사용한다. 한 번 입력해두면 이후 재검색에서도 유지되고,
       // enrichMenus가 카카오보다 이 값을 우선해 네이버 메뉴를 조회한다(대개 더 잘 관리돼 있어서).
-      naverPlaceId: saved.naverPlaceId || null,
+      naverPlaceId: pickField('naverPlaceId') || null,
       // 카카오톡 채널 ID도 네이버 place id와 마찬가지로 자동 매칭 방법이 없어 사용자가 직접
       // 입력해둔 값만 쓴다. 이미지 자체(cafeteriaMenuImage)는 저장하지 않고 매번 라이브로
       // 다시 가져온다(오늘자 메뉴가 바뀌었을 수 있어서) — enrichMenus가 raw를 직접 mutate해둔
       // 값을 여기서는 그대로 넘겨받기만 한다.
-      cafeteriaChannelId: saved.cafeteriaChannelId || null,
+      cafeteriaChannelId: pickField('cafeteriaChannelId') || null,
       // 카카오톡 채널이 없는 식당(인스타그램에만 올리는 등)은 채널ID 대신 사람이 직접 붙여넣은
       // 사진으로 대신한다. 한 번이라도 올린 적 있으면 이 플래그를 세워서, 재검색 때마다
       // enrichMenus가 "오늘자로 새로 올라온 사진이 있는지" 계속 확인하게 한다.
-      cafeteriaManualEnabled: !!saved.cafeteriaManualEnabled,
+      cafeteriaManualEnabled: !!pickField('cafeteriaManualEnabled'),
       // 인스타그램처럼 하루 단위가 아니라 "주간 식단표" 한 장을 요일별로 나눠 붙여넣는
       // 식당용(정보 편집의 요일별 5칸 참고). cafeteriaManualEnabled와 마찬가지로 한 번이라도
       // 올린 적 있으면 세워두고, 재검색 때마다 오늘 요일 칸이 채워져 있는지 계속 확인한다.
-      cafeteriaWeeklyEnabled: !!saved.cafeteriaWeeklyEnabled,
+      cafeteriaWeeklyEnabled: !!pickField('cafeteriaWeeklyEnabled'),
       cafeteriaMenuImage: raw.cafeteriaMenuImage || null,
-      edited: !!saved.edited
+      edited: !!pickField('edited')
     };
   }
 
@@ -1741,14 +1787,19 @@
         var value = o[2];
         // 로컬 저장은 오프라인 폴백/이전 버전 호환용으로 계속 남겨두고, 공유 저장소(state.sharedOverrides)를
         // 진짜 소스로 낙관적 갱신한 뒤 서버(Worker KV)에도 반영해 다른 PC/사용자에게 전파한다.
+        // 이 식당의 공유 레코드에 cuisine/menuItems 등 다른 필드가 이미 들어있을 수 있으니
+        // 통째로 교체하지 않고 manualOverride 필드만 갱신/삭제한다.
         saveOverride(r.id, { manualOverride: value });
         state.sharedOverrides = state.sharedOverrides || {};
-        if(value === null){ delete state.sharedOverrides[r.id]; }
-        else { state.sharedOverrides[r.id] = { manualOverride: value, updatedAt: Date.now() }; }
+        if(value === null){
+          if(state.sharedOverrides[r.id]) delete state.sharedOverrides[r.id].manualOverride;
+        } else {
+          state.sharedOverrides[r.id] = Object.assign({}, state.sharedOverrides[r.id], { manualOverride: value, updatedAt: Date.now() });
+        }
         r.manualOverride = value;
         r.isIncluded = value === null ? (r.includedByGeometry && !r.excludedByHours) : value;
         renderList(); updateCtaState();
-        saveSharedOverride(r.id, value).catch(function(err){
+        saveSharedOverridePatch(r.id, { manualOverride: value }).catch(function(err){
           console.warn('[lunch-recommender] 제외/포함 상태 공유 실패 (내 화면에는 반영됨):', err && err.message);
         });
       });
@@ -1882,6 +1933,7 @@
       if(!channelId){ showAlert('카카오톡 채널 ID를 찾을 수 없어요. pf.kakao.com/_xxxxx 형태의 링크나 _xxxxx만 입력해주세요.'); return; }
       var saved = saveOverride(r.id, { cafeteriaChannelId: channelId });
       r.cafeteriaChannelId = saved.cafeteriaChannelId;
+      saveSharedOverridePatch(r.id, { cafeteriaChannelId: channelId });
       cafeteriaSaveBtn.disabled = true; cafeteriaSaveBtn.textContent = '조회 중…';
       fetchCafeteriaMenuImageFor(channelId).then(function(res){
         cafeteriaSaveBtn.disabled = false; cafeteriaSaveBtn.textContent = '저장 & 조회';
@@ -1912,6 +1964,7 @@
         .then(function(photoDataUrl){
           cafeteriaPasteStatus.textContent = '오늘자 메뉴 사진으로 등록됐어요.';
           saveOverride(r.id, { cafeteriaManualEnabled: true });
+          saveSharedOverridePatch(r.id, { cafeteriaManualEnabled: true });
           r.cafeteriaManualEnabled = true;
           r.cafeteriaMenuImage = { imageUrl: photoDataUrl, source: 'manual', uploadedAt: Date.now() };
           refreshAfterCafeteriaImageChange();
@@ -1945,6 +1998,7 @@
           .then(function(){
             status.textContent = '✅ 이번 주 등록됨';
             saveOverride(r.id, { cafeteriaWeeklyEnabled: true });
+            saveSharedOverridePatch(r.id, { cafeteriaWeeklyEnabled: true });
             r.cafeteriaWeeklyEnabled = true;
             // 방금 채운 칸이 오늘 요일이면 바로 반영, 아니면(다른 요일 칸이면) 조용히
             // 넘어간다 — fetchCafeteriaWeeklyPhotoFor가 오늘 요일이 아니면 알아서
@@ -2046,6 +2100,7 @@
       if(!naverPlaceId){ showAlert('숫자로 된 네이버 place id를 찾을 수 없어요. 네이버지도 URL(pcmap.place.naver.com/restaurant/숫자/...)을 확인해주세요.'); return; }
       var saved = saveOverride(r.id, { naverPlaceId: naverPlaceId });
       r.naverPlaceId = saved.naverPlaceId;
+      saveSharedOverridePatch(r.id, { naverPlaceId: naverPlaceId });
       naverSaveBtn.disabled = true; naverSaveBtn.textContent = '조회 중…';
       fetchNaverMenuFor(naverPlaceId).then(function(res){
         naverSaveBtn.disabled = false; naverSaveBtn.textContent = '저장 & 조회';
@@ -2070,6 +2125,7 @@
       });
       var patch = { cuisine: cuisineSelect.value, menuItems: menuItems, menuSource: 'manual', edited: true };
       var saved = saveOverride(r.id, patch);
+      saveSharedOverridePatch(r.id, patch);
       r.cuisine = saved.cuisine; r.menuItems = saved.menuItems; r.edited = true;
       renderList(); updateCtaState();
     });
@@ -2084,7 +2140,15 @@
         var all = loadOverrides();
         delete all[r.id];
         storageSet('overrides', all);
-        location.reload();
+        // 공유 저장소에도 같은 필드가 있으면 로컬만 지워선 안 보이던 값이 그대로 남는다 —
+        // 자동/포함/제외(manualOverride)는 이 버튼과 별개 개념이라 건드리지 않는다.
+        saveSharedOverridePatch(r.id, {
+          cuisine: null, menuItems: null, menuSource: null, edited: null,
+          cafeteriaChannelId: null, naverPlaceId: null,
+          cafeteriaManualEnabled: null, cafeteriaWeeklyEnabled: null
+        }).catch(function(err){
+          console.warn('[lunch-recommender] 공유 편집분 초기화 실패:', err && err.message);
+        }).then(function(){ location.reload(); });
       });
     });
     form.appendChild(resetBtn);
@@ -2675,9 +2739,13 @@
     state.skippedRestaurantIds = [];
     state.loading = true;
     updateLoadingUi();
-    // 공유 제외/포함 상태 조회는 카카오 검색과 별개 요청이라 병렬로 진행한다(실패해도 빈
+    // 공유 편집 상태 조회는 카카오 검색과 별개 요청이라 병렬로 진행한다(실패해도 빈
     // 객체로 폴백하므로 카카오 검색 성공/실패 분기와 경쟁 상태 없이 항상 값이 채워진 뒤 merge됨).
     var overridesPromise = fetchSharedOverrides().then(function(shared){ state.sharedOverrides = shared; });
+    // 이 기기에만 있던 예전 로컬 편집분을 공유 저장소로 이관 — 렌더링을 막을 이유는 없으니
+    // (이미 로컬값으로 정상 렌더되고, 이건 "다른 사람도 볼 수 있게" 백필하는 것뿐) 결과를
+    // 기다리지 않는다.
+    migrateLocalOverridesToShared();
     var restaurantsPromise = loadKakaoSdk().then(kakaoReady).then(fetchLiveRestaurants);
     return Promise.all([overridesPromise, restaurantsPromise])
       .then(function(results){
