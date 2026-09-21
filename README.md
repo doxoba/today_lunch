@@ -190,13 +190,6 @@ GitHub Pages와 달리 **git push로 자동 배포되지 않습니다.** Cloudfl
 5. **Claude Artifact에서는 데모 모드**: CSP 제한 때문에 Claude Artifact 버전은 항상 데모 데이터를 표시하고, 팀 모드/리뷰 등 Worker 연동 기능도 동작하지 않습니다.
    - 실제 데이터를 보려면: GitHub Pages나 자체 도메인으로 배포하세요
 
-## API 키 & 비밀정보
-
-**카카오 JavaScript 키**: `9394ac1268768ad4accfdf8623a92f16`
-- 용도: Geocoder, Places API, 지도 렌더링
-- 위치: HTML 내부 `CONFIG.KAKAO_JS_KEY`에 설정됨
-
-*참고: 이 앱에는 REST API 키가 필요 없습니다(Worker가 대신 호출하는 것도 모두 비공식 공개 엔드포인트라 별도 키가 필요 없음)*
 
 ## 프로젝트 파일
 
