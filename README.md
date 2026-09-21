@@ -1,6 +1,6 @@
-# 🍽️ 오늘 뭐 먹지 (Lunch Menu Recommender)
+# 🍽️ 한끼픽 (Lunch Menu Recommender)
 
-**"오늘 뭐 먹지 고민 끝"** — HYUNDAI BOOTCAMP 수강생들을 위한 점심 메뉴 추천 도구입니다 🙌
+**"한끼픽"** — HYUNDAI BOOTCAMP 수강생들을 위한 점심 메뉴 추천 도구입니다 🙌
 
 ## 1. 개요
 오늘의 취향에 맞춰 조건을 설정하면 근처 식당과 메뉴를 추천해주는 도구입니다. 
