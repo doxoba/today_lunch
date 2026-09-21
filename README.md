@@ -170,10 +170,10 @@ GitHub Pages와 달리 **git push로 자동 배포되지 않습니다.** Cloudfl
 
 ## 디자인 & 스타일
 
-- **레이아웃**: 3단 그리드(기본 1180px) → 반응형 1단 컬럼(< 1024px)
-- **폰트**: Pretendard
-- **강조 색상**: 딥 틸(#1f8a70)
-- **디자인 토큰**: 전체 디자인 시스템은 `UI-REDESIGN-SPEC.md` 참고
+- **레이아웃**: 벤토 그리드(조건·결과·지도, 기본 1180px) → 반응형 1단 컬럼(< 1024px). 하단 식당 목록도 사진/컬러블록 타일 그리드
+- **폰트**: 헤드라인/버튼 Black Han Sans · Do Hyeon, 메타/캡션 IBM Plex Mono, 본문/입력폼 Pretendard
+- **컬러**: 네오 라임(#c8ff2e) + 잉크 블랙(#111411) + 네온 핫핑크(#ff2d78) — "찍먹" B급 팝 스타일
+- **디자인 토큰**: 기존 딥 틸 기반 스펙은 `UI-REDESIGN-SPEC.md`/`UI-REDESIGN-SPEC_V2.md` 참고(2026-09-21 팝 스타일로 리디자인하며 컬러/폰트는 대체됨, 그리드 레이아웃 방식은 `Lunch Recommender - Bento Grid.dc.html` 참고)
 
 ## 알려진 제한사항
 
