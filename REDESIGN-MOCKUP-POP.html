@@ -1,0 +1,393 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>한끼픽 — 찍먹(Direction 02) 팝 목업</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=Do+Hyeon&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css">
+<link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/regular/style.css">
+<link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/fill/style.css">
+<style>
+  :root{
+    --lime:  #c8ff2e;
+    --ink:   #111411;
+    --pink:  #ff2d78;
+    --paper: #fffef0;
+    --card:  #ffffff;
+    --line:  rgba(17,20,17,.16);
+    --line-strong: rgba(17,20,17,.9);
+    --text-muted: rgba(17,20,17,.55);
+    --r-sm: 8px; --r-md: 12px; --r-lg: 16px; --r-pill: 999px;
+    --f-display: 'Black Han Sans', sans-serif;
+    --f-sub: 'Do Hyeon', sans-serif;
+    --f-mono: 'IBM Plex Mono', monospace;
+    --f-body: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0; background:var(--paper); color:var(--ink); font-family:var(--f-body);}
+  a{color:var(--ink);}
+  :focus-visible{outline:3px solid var(--pink); outline-offset:2px;}
+
+  .mockup-flag{background:var(--ink); color:var(--lime); font-family:var(--f-mono); font-size:12px; text-align:center; padding:8px 12px; letter-spacing:.04em;}
+
+  .shell{max-width:1180px; margin:0 auto; padding:28px 20px 60px;}
+
+  /* ---------- 헤더: 스탬프 워드마크 ---------- */
+  .page-header{display:flex; align-items:center; justify-content:space-between; gap:20px; flex-wrap:wrap; margin-bottom:24px;}
+  .stamp{display:inline-flex; flex-direction:column; align-items:flex-start; gap:8px; transform:rotate(-2deg);}
+  .stamp .top{font-family:var(--f-mono); font-size:11px; font-weight:600; letter-spacing:.14em; background:var(--ink); color:var(--lime); padding:4px 10px; border-radius:5px;}
+  .stamp .main{font-family:var(--f-display); font-size:44px; line-height:1; letter-spacing:-.01em; color:var(--ink);}
+  .stamp .main .pop{color:var(--pink);}
+  .page-sub{font-family:var(--f-mono); font-size:11px; color:var(--text-muted); margin:6px 0 0; letter-spacing:.02em;}
+  .rail-pill{
+    display:inline-flex; align-items:center; gap:6px; background:var(--lime); color:var(--ink);
+    border:2px solid var(--ink); padding:8px 16px; border-radius:var(--r-pill); font-family:var(--f-sub); font-size:13px; max-width:280px; text-align:left; line-height:1.3;
+  }
+
+  /* ---------- 벤토 그리드 ---------- */
+  .bento{display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); grid-auto-rows:minmax(140px,auto); grid-auto-flow:dense; gap:16px; margin-bottom:16px;}
+  .bento .span-2{grid-column:span 2;}
+  .bento .row-2{grid-row:span 2;}
+  @media (max-width:1023px){ .bento .span-2{grid-column:span 1;} }
+
+  .panel{background:var(--card); border:2px solid var(--ink); border-radius:var(--r-lg);}
+
+  /* ---------- 조건 패널 ---------- */
+  .panel-filters{padding:20px; display:flex; flex-direction:column; gap:16px;}
+  .section-label{font-family:var(--f-mono); font-size:11px; font-weight:600; color:var(--ink); letter-spacing:.1em; text-transform:uppercase;}
+  .group-label{font-family:var(--f-sub); font-size:14px; color:var(--ink); margin-bottom:8px;}
+  .chips{display:flex; flex-wrap:wrap; gap:8px;}
+  .chip{
+    background:#fff; color:var(--ink); border:2px solid var(--ink); padding:6px 13px;
+    border-radius:var(--r-pill); font-family:var(--f-sub); font-size:14px; cursor:pointer; transition:.12s;
+  }
+  .chip:hover{border-color:var(--pink); color:var(--pink);}
+  .chip.active{background:var(--lime); color:var(--ink); border-color:var(--ink); font-weight:600;}
+  .filter-foot{margin-top:auto; display:flex; flex-direction:column; gap:10px;}
+  .reset-link{align-self:flex-start; background:none; border:none; font-family:var(--f-mono); font-size:11px; color:var(--text-muted); text-decoration:underline; cursor:pointer; padding:0;}
+  .cta{width:100%; padding:14px; border:2px solid var(--ink); border-radius:var(--r-md); background:var(--ink); color:var(--lime); font-family:var(--f-display); font-size:18px; letter-spacing:-.01em; cursor:pointer; transition:.12s;}
+  .cta:hover{background:var(--pink); color:#fff; border-color:var(--pink);}
+  .cta:active{transform:translateY(1px);}
+  .cta-help{font-family:var(--f-mono); font-size:11px; color:var(--text-muted); margin:0; text-align:center;}
+
+  /* ---------- 결과 히어로 카드 ---------- */
+  .result-hero{padding:30px; display:flex; flex-direction:column; box-shadow:5px 5px 0 var(--ink);}
+  .bubble-kicker{
+    display:inline-flex; align-self:flex-start; padding:8px 16px; background:var(--ink); color:var(--lime);
+    border-radius:16px; font-family:var(--f-display); font-size:16px; position:relative; margin-bottom:16px;
+  }
+  .bubble-kicker:after{content:""; position:absolute; bottom:-8px; left:22px; width:0; height:0; border-left:10px solid transparent; border-top:10px solid var(--ink);}
+  .result-name{font-family:var(--f-display); font-size:42px; line-height:1.08; margin-bottom:8px; letter-spacing:-.01em;}
+  .result-meta{font-family:var(--f-mono); font-size:12px; color:var(--text-muted); margin-bottom:16px; letter-spacing:.02em;}
+  .result-review-row{display:flex; gap:16px; margin-bottom:14px;}
+  .edit-toggle{background:none; border:none; color:var(--pink); font-family:var(--f-sub); font-size:14px; cursor:pointer; padding:0;}
+  .result-badge{
+    display:inline-block; background:var(--lime); color:var(--ink); font-family:var(--f-display); font-size:18px;
+    padding:10px 18px; border-radius:var(--r-md); margin-bottom:16px; align-self:flex-start; border:2px solid var(--ink); transform:rotate(-1.5deg);
+  }
+  .cafeteria-menu-image{margin-bottom:16px; max-width:260px;}
+  .cafeteria-menu-image img{width:100%; border-radius:var(--r-md); display:block; border:2px solid var(--ink);}
+  .cafeteria-menu-note{font-family:var(--f-mono); font-size:10px; color:var(--text-muted); margin-top:6px;}
+  .other-label{font-family:var(--f-mono); font-size:11px; color:var(--text-muted); margin-bottom:6px; text-transform:uppercase; letter-spacing:.06em;}
+  .other-list{list-style:none; margin:0 0 20px; padding:0; font-family:var(--f-body); font-size:14px; line-height:1.9; color:var(--ink);}
+  .other-list li{padding-left:16px; position:relative;}
+  .other-list li:before{content:""; position:absolute; left:0; top:8px; width:7px; height:7px; background:var(--pink);}
+  .result-actions{display:flex; gap:8px; flex-wrap:wrap; margin-top:auto;}
+  .btn{font-family:var(--f-sub); font-size:14px; padding:10px 16px; border-radius:var(--r-pill); cursor:pointer; display:inline-flex; align-items:center; gap:6px; transition:.12s; border:2px solid var(--ink);}
+  .btn-pop{background:var(--pink); color:#fff; border-color:var(--pink);}
+  .btn-pop:hover{background:#e0206a;}
+  .btn-outline{background:transparent; color:var(--ink);}
+  .btn-outline:hover{background:var(--lime);}
+
+  /* ---------- 지도 타일(목업) ---------- */
+  .panel-map{padding:16px; position:relative; overflow:hidden; display:flex; flex-direction:column;}
+  .map-mock{flex:1; min-height:260px; border-radius:var(--r-md); background:var(--paper); border:2px dashed var(--ink); position:relative; margin-top:10px; overflow:hidden;}
+  .map-mock::before{content:"미리보기(목업) — 실제 화면엔 카카오 지도"; position:absolute; bottom:8px; left:10px; font-family:var(--f-mono); font-size:9px; color:var(--text-muted);}
+  .map-ring{position:absolute; left:50%; top:48%; transform:translate(-50%,-50%); width:74%; aspect-ratio:1; border-radius:50%; border:2px dashed rgba(17,20,17,.3);}
+  .map-ring::after{content:""; position:absolute; inset:22%; border-radius:50%; border:2px dashed rgba(17,20,17,.3);}
+  .map-dot{position:absolute; width:9px; height:9px; border-radius:50%; background:var(--ink); transform:translate(-50%,-50%);}
+  .map-dot.active{width:16px; height:16px; background:var(--pink); box-shadow:0 0 0 5px rgba(255,45,120,.22); border:2px solid var(--ink);}
+
+  /* ---------- 팀모드 미니 패널 ---------- */
+  .team-panel{padding:18px 20px; margin-bottom:16px;}
+  .team-panel-head{display:flex; justify-content:space-between; align-items:baseline; gap:12px; flex-wrap:wrap; margin-bottom:14px;}
+  .team-actions{display:flex; gap:8px;}
+  .team-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:10px;}
+  .team-member-row{background:var(--paper); border:2px solid var(--ink); border-radius:var(--r-md); padding:10px 12px; font-family:var(--f-body); font-size:12px;}
+  .team-member-row .name{font-family:var(--f-sub); font-size:15px; margin-bottom:4px;}
+  .team-role-badge{font-family:var(--f-mono); font-size:10px; font-weight:600; color:var(--ink); border:1.5px solid var(--ink); border-radius:var(--r-pill); padding:2px 8px; margin-left:6px;}
+  .team-member-status{display:inline-block; margin-top:6px; font-family:var(--f-mono); font-size:10px; padding:3px 8px; border-radius:var(--r-sm); background:#f4f5f0; color:var(--text-muted);}
+  .team-member-status.ready{background:var(--lime); color:var(--ink);}
+
+  /* ---------- 하단 식당 목록 ---------- */
+  .accordion{border:2px solid var(--ink); border-radius:var(--r-md); background:var(--card); overflow:hidden;}
+  .accordion summary{list-style:none; cursor:pointer; padding:14px 16px; display:flex; align-items:center; justify-content:space-between; font-family:var(--f-sub); font-size:16px;}
+  .accordion summary::-webkit-details-marker{display:none;}
+  .list-note{font-family:var(--f-mono); font-size:10px; color:var(--text-muted); margin:0 16px 10px;}
+  .r-grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(210px,1fr)); gap:14px; padding:0 16px 18px;}
+
+  .r-tile{background:#fff; border:2px solid var(--ink); border-radius:var(--r-md); overflow:hidden; transition:.12s;}
+  .r-tile:hover{transform:translateY(-2px);}
+  .r-tile.picked{box-shadow:4px 4px 0 var(--pink);}
+  .r-tile-top{height:108px; position:relative; display:flex; flex-direction:column; justify-content:flex-end; padding:10px 12px; color:#fff; background-size:cover; background-position:center; border-bottom:2px solid var(--ink);}
+  .r-tile-top::before{content:""; position:absolute; inset:0; background:linear-gradient(to top, rgba(17,20,17,.78), rgba(17,20,17,.05) 65%);}
+  .r-tile-top > *{position:relative; z-index:1;}
+  .r-tile-top .ph{font-size:20px;}
+  .r-tile-cui{font-family:var(--f-mono); font-size:10px; font-weight:600; letter-spacing:.05em; text-transform:uppercase; margin-top:auto;}
+
+  .cui-lime{background-color:#5a7a12; background-image:linear-gradient(160deg, #3f5a0c, #8dbf1e);}
+  .cui-pink{background-color:#7a1440; background-image:linear-gradient(160deg, #7a1440, var(--pink));}
+  .cui-ink{background-color:#111411; background-image:linear-gradient(160deg, #111411, #3a3f39);}
+
+  .r-tile-body{padding:11px 13px 13px;}
+  .r-tile-top-row{display:flex; align-items:flex-start; justify-content:space-between; gap:6px;}
+  .r-tile-name{font-family:var(--f-sub); font-size:15px; color:var(--ink);}
+  .r-tile-dist{font-family:var(--f-mono); font-size:10px; color:var(--text-muted); white-space:nowrap;}
+  .r-tile-cat{font-family:var(--f-mono); font-size:10px; color:var(--text-muted); margin:3px 0 8px;}
+  .badge{font-family:var(--f-mono); font-size:9px; font-weight:600; background:var(--lime); color:var(--ink); padding:2px 6px; border-radius:var(--r-sm); margin-left:5px; border:1px solid var(--ink);}
+  .side-toggle{display:flex; gap:4px; margin:2px 0 8px;}
+  .side-toggle button{font-family:var(--f-mono); font-size:10px; padding:3px 7px; border-radius:var(--r-sm); border:1.5px solid var(--ink); background:#fff; color:var(--text-muted); cursor:pointer;}
+  .side-toggle button.on{background:var(--ink); color:var(--lime); border-color:var(--ink);}
+  .r-tile-actions{display:flex; gap:10px;}
+  .r-tile-actions button{background:none; border:none; color:var(--pink); font-family:var(--f-sub); font-size:12px; cursor:pointer; padding:0;}
+
+  footer.mockup-note{max-width:1180px; margin:24px auto 0; padding:0 20px; font-family:var(--f-mono); font-size:11px; color:var(--text-muted);}
+</style>
+</head><body>
+
+<div class="mockup-flag">🎨 디자인 목업 (Direction 02 · 찍먹 팝 스타일) — 네오 라임 + 잉크 + 네온 핫핑크(#FF2D78). 실제 데이터/로직 미연결.</div>
+
+<div class="shell">
+
+  <header class="page-header">
+    <div>
+      <div class="stamp">
+        <div class="top">TODAY'S</div>
+        <div class="main">한끼<span class="pop">픽!</span></div>
+      </div>
+    </div>
+    <div class="rail-pill"><i class="ph ph-map-pin" aria-hidden="true"></i>강의장 인근 반경 Nkm 내 / 철길 건너 제외</div>
+  </header>
+
+  <div class="bento" id="board">
+
+    <div class="panel panel-filters row-2">
+      <div class="section-label">조건</div>
+      <div class="filter-group">
+        <div class="group-label">반경 (바꾸면 다시 검색해요)</div>
+        <div class="chips" data-group="radius">
+          <button class="chip" type="button">100m</button>
+          <button class="chip active" type="button">300m</button>
+          <button class="chip" type="button">500m</button>
+        </div>
+      </div>
+      <div class="filter-group">
+        <div class="group-label">형태</div>
+        <div class="chips" data-group="type">
+          <button class="chip" type="button">면</button>
+          <button class="chip active" type="button">밥</button>
+          <button class="chip" type="button">국물</button>
+          <button class="chip" type="button">구이</button>
+          <button class="chip" type="button">튀김</button>
+          <button class="chip" type="button">분식</button>
+          <button class="chip" type="button">기타</button>
+        </div>
+      </div>
+      <div class="filter-group">
+        <div class="group-label">종류</div>
+        <div class="chips" data-group="cuisine">
+          <button class="chip active" type="button">구내식당/한식뷔페</button>
+          <button class="chip" type="button">국밥/탕/찌개</button>
+          <button class="chip" type="button">제육/백반/정식</button>
+          <button class="chip" type="button">중식</button>
+          <button class="chip" type="button">면류/분식</button>
+          <button class="chip" type="button">돈까스/일식/양식</button>
+          <button class="chip" type="button">아시안/세계요리</button>
+          <button class="chip" type="button">간편식/식단관리</button>
+        </div>
+      </div>
+      <div class="filter-foot">
+        <button class="reset-link" type="button">조건 초기화</button>
+        <button class="cta" type="button" id="mockRecommendBtn">오늘 뭐 먹지?</button>
+        <p class="cta-help">후보 6곳 중에서 무작위로 뽑아요</p>
+      </div>
+    </div>
+
+    <div class="panel result-hero span-2 row-2" id="mockResultCard">
+      <span class="bubble-kicker">픽!</span>
+      <div class="result-name">반짝 구내식당</div>
+      <div class="result-meta">구내식당/한식뷔페 · 밥 · 60M · 도보 약 1분</div>
+      <div class="result-review-row">
+        <button class="edit-toggle" type="button">댓글 남기기</button>
+        <button class="edit-toggle" type="button">댓글 보기 (3)</button>
+      </div>
+      <span class="result-badge">오늘의 정식</span>
+      <div class="cafeteria-menu-image">
+        <img src="https://picsum.photos/seed/cafeteria-menu/520/320" alt="오늘의 메뉴 사진">
+        <div class="cafeteria-menu-note">카카오톡 채널 프로필 사진 · 3시간 전 갱신</div>
+      </div>
+      <div class="other-label">다른메뉴</div>
+      <ul class="other-list">
+        <li>잡곡밥 무한리필</li>
+        <li>계란찜</li>
+        <li>오늘의 국</li>
+      </ul>
+      <div class="result-actions">
+        <button class="btn btn-pop" type="button"><i class="ph ph-shuffle" aria-hidden="true"></i>다시 뽑기</button>
+        <button class="btn btn-outline" type="button"><i class="ph ph-prohibit" aria-hidden="true"></i>이 가게 넘기기</button>
+        <a class="btn btn-outline" href="#"><i class="ph ph-navigation-arrow" aria-hidden="true"></i>길찾기</a>
+        <a class="btn btn-outline" href="#">지도에서 보기</a>
+      </div>
+    </div>
+
+    <div class="panel panel-map row-2">
+      <div class="section-label">지도</div>
+      <div class="map-mock">
+        <div class="map-ring"></div>
+        <div class="map-dot active" style="left:50%; top:48%;"></div>
+        <div class="map-dot" style="left:34%; top:30%;"></div>
+        <div class="map-dot" style="left:66%; top:34%;"></div>
+        <div class="map-dot" style="left:70%; top:62%;"></div>
+        <div class="map-dot" style="left:30%; top:66%;"></div>
+        <div class="map-dot" style="left:58%; top:72%;"></div>
+        <div class="map-dot" style="left:22%; top:48%;"></div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="panel team-panel">
+    <div class="team-panel-head">
+      <div>
+        <div class="section-label">우리 오늘 뭐먹지</div>
+        <p class="page-sub" style="margin:2px 0 0;">팀을 꾸려서 모두의 취향을 반영한 메뉴를 뽑아요</p>
+      </div>
+      <div class="team-actions">
+        <button class="btn btn-outline" type="button"><i class="ph ph-user-plus" aria-hidden="true"></i>멤버 초대하기</button>
+        <button class="btn btn-outline" type="button"><i class="ph ph-sign-in" aria-hidden="true"></i>멤버 참여하기</button>
+      </div>
+    </div>
+    <div class="team-grid">
+      <div class="team-member-row"><span class="name">나</span><span class="team-role-badge">호스트</span><div class="team-member-status ready">준비 완료</div></div>
+      <div class="team-member-row"><span class="name">김도경</span><div class="team-member-status">조건 입력 중</div></div>
+      <div class="team-member-row"><span class="name">이서현</span><div class="team-member-status ready">준비 완료</div></div>
+    </div>
+  </div>
+
+  <details class="accordion" open>
+    <summary>주변 식당 목록 · 정보 편집<i class="ph ph-caret-down" aria-hidden="true"></i></summary>
+    <p class="list-note">사진이 있는 구내식당/리뷰 매장은 실제 사진을, 사진이 없는 매장은 종류별 컬러 블록(라임/핑크/잉크)을 사용해요.</p>
+    <div class="r-grid">
+
+      <div class="r-tile picked">
+        <div class="r-tile-top" style="background-image:url('https://picsum.photos/seed/cafeteria-menu/400/260')">
+          <div class="r-tile-cui">오늘의 메뉴 사진</div>
+        </div>
+        <div class="r-tile-body">
+          <div class="r-tile-top-row"><div class="r-tile-name">반짝 구내식당<span class="badge">사진</span></div><div class="r-tile-dist">60m</div></div>
+          <div class="r-tile-cat">밥 · 구내식당/한식뷔페</div>
+          <div class="side-toggle"><button>자동</button><button class="on">포함</button><button>제외</button></div>
+          <div class="r-tile-actions"><button>정보 편집</button><button>댓글 남기기</button></div>
+        </div>
+      </div>
+
+      <div class="r-tile">
+        <div class="r-tile-top" style="background-image:url('https://picsum.photos/seed/review-photo/400/260')">
+          <div class="r-tile-cui">리뷰 사진</div>
+        </div>
+        <div class="r-tile-body">
+          <div class="r-tile-top-row"><div class="r-tile-name">우리집 백반<span class="badge">수정됨</span></div><div class="r-tile-dist">120m</div></div>
+          <div class="r-tile-cat">밥 · 제육/백반/정식</div>
+          <div class="side-toggle"><button class="on">자동</button><button>포함</button><button>제외</button></div>
+          <div class="r-tile-actions"><button>정보 편집</button><button>댓글 보기 (2)</button></div>
+        </div>
+      </div>
+
+      <div class="r-tile">
+        <div class="r-tile-top cui-pink"><i class="ph-fill ph-noodle" aria-hidden="true"></i><div class="r-tile-cui">중식</div></div>
+        <div class="r-tile-body">
+          <div class="r-tile-top-row"><div class="r-tile-name">홍콩반점 가산점</div><div class="r-tile-dist">150m</div></div>
+          <div class="r-tile-cat">면 · 중식</div>
+          <div class="side-toggle"><button class="on">자동</button><button>포함</button><button>제외</button></div>
+          <div class="r-tile-actions"><button>정보 편집</button><button>댓글 남기기</button></div>
+        </div>
+      </div>
+
+      <div class="r-tile">
+        <div class="r-tile-top cui-lime"><i class="ph-fill ph-bowl-food" aria-hidden="true"></i><div class="r-tile-cui">국밥/탕/찌개</div></div>
+        <div class="r-tile-body">
+          <div class="r-tile-top-row"><div class="r-tile-name">가산맘 국밥집</div><div class="r-tile-dist">90m</div></div>
+          <div class="r-tile-cat">국물 · 국밥/탕/찌개</div>
+          <div class="side-toggle"><button class="on">자동</button><button>포함</button><button>제외</button></div>
+          <div class="r-tile-actions"><button>정보 편집</button><button>댓글 남기기</button></div>
+        </div>
+      </div>
+
+      <div class="r-tile">
+        <div class="r-tile-top cui-ink"><i class="ph-fill ph-cooking-pot" aria-hidden="true"></i><div class="r-tile-cui">돈까스/일식/양식</div></div>
+        <div class="r-tile-body">
+          <div class="r-tile-top-row"><div class="r-tile-name">돈카츠 공방</div><div class="r-tile-dist">200m</div></div>
+          <div class="r-tile-cat">튀김 · 돈까스/일식/양식</div>
+          <div class="side-toggle"><button class="on">자동</button><button>포함</button><button>제외</button></div>
+          <div class="r-tile-actions"><button>정보 편집</button><button>댓글 남기기</button></div>
+        </div>
+      </div>
+
+      <div class="r-tile">
+        <div class="r-tile-top cui-lime"><i class="ph-fill ph-fish" aria-hidden="true"></i><div class="r-tile-cui">아시안/세계요리</div></div>
+        <div class="r-tile-body">
+          <div class="r-tile-top-row"><div class="r-tile-name">포메인 아시안다이닝</div><div class="r-tile-dist">250m</div></div>
+          <div class="r-tile-cat">국물 · 아시안/세계요리</div>
+          <div class="side-toggle"><button class="on">자동</button><button>포함</button><button>제외</button></div>
+          <div class="r-tile-actions"><button>정보 편집</button><button>댓글 남기기</button></div>
+        </div>
+      </div>
+
+      <div class="r-tile">
+        <div class="r-tile-top cui-ink"><i class="ph-fill ph-leaf" aria-hidden="true"></i><div class="r-tile-cui">간편식/식단관리</div></div>
+        <div class="r-tile-body">
+          <div class="r-tile-top-row"><div class="r-tile-name">그린샐러드 델리</div><div class="r-tile-dist">110m</div></div>
+          <div class="r-tile-cat">기타 · 간편식/식단관리</div>
+          <div class="side-toggle"><button class="on">자동</button><button>포함</button><button>제외</button></div>
+          <div class="r-tile-actions"><button>정보 편집</button><button>댓글 남기기</button></div>
+        </div>
+      </div>
+
+      <div class="r-tile">
+        <div class="r-tile-top cui-pink"><i class="ph-fill ph-bowl-food" aria-hidden="true"></i><div class="r-tile-cui">면류/분식</div></div>
+        <div class="r-tile-body">
+          <div class="r-tile-top-row"><div class="r-tile-name">우동한그릇</div><div class="r-tile-dist">80m</div></div>
+          <div class="r-tile-cat">면 · 면류/분식</div>
+          <div class="side-toggle"><button class="on">자동</button><button>포함</button><button>제외</button></div>
+          <div class="r-tile-actions"><button>정보 편집</button><button>댓글 남기기</button></div>
+        </div>
+      </div>
+
+    </div>
+  </details>
+
+</div>
+
+<footer class="mockup-note">이 파일은 Direction 02(찍먹) 팝 스타일 검토용 목업입니다. 확정되면 lunch-recommender.html에 실제 로직과 함께 반영합니다.</footer>
+
+<script>
+  document.querySelectorAll('.chips').forEach(function(group){
+    var multi = group.dataset.group !== 'radius';
+    group.querySelectorAll('.chip').forEach(function(chip){
+      chip.addEventListener('click', function(){
+        if(multi){ chip.classList.toggle('active'); }
+        else { group.querySelectorAll('.chip').forEach(function(c){ c.classList.remove('active'); }); chip.classList.add('active'); }
+      });
+    });
+  });
+  document.getElementById('mockRecommendBtn').addEventListener('click', function(){
+    var card = document.getElementById('mockResultCard');
+    card.style.transition = 'none';
+    card.style.opacity = '0'; card.style.transform = 'translateY(4px)';
+    requestAnimationFrame(function(){
+      card.style.transition = 'opacity .15s, transform .15s';
+      card.style.opacity = '1'; card.style.transform = 'translateY(0)';
+    });
+  });
+</script>
+
+</body></html>

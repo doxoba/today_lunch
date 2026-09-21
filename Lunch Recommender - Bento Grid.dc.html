@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="_ds/nocturne-63b5feea-619c-41b0-823d-2df88617280c/styles.css">
+  <script src="_ds/nocturne-63b5feea-619c-41b0-823d-2df88617280c/_ds_bundle.js"></script>
+  <script src="./image-slot.js"></script>
+  <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css">
+  <style>
+    :root{
+      --font-heading:Pretendard,-apple-system,BlinkMacSystemFont,system-ui,sans-serif;
+      --font-body:Pretendard,-apple-system,BlinkMacSystemFont,system-ui,sans-serif;
+      --color-bg:#ffffff; --color-surface:#fbfbfc; --color-text:#161826;
+      --color-divider:#e6e6ea;
+      --color-neutral-500:#8a8d9a;
+      --color-accent:#1f8a70; --color-accent-2:#1f8a70;
+      --color-accent-100:#eafbf6; --color-accent-200:#cdf1e6; --color-accent-300:#a3e2cd;
+      --color-accent-400:#74cbae; --color-accent-500:#3ba98a; --color-accent-600:#217a63;
+      --color-accent-700:#185d4b; --color-accent-800:#123f34; --color-accent-900:#0b2620;
+      --color-accent-2-100:#eafbf6; --color-accent-2-200:#cdf1e6; --color-accent-2-300:#a3e2cd;
+      --color-accent-2-400:#74cbae; --color-accent-2-500:#3ba98a; --color-accent-2-600:#217a63;
+      --color-accent-2-700:#185d4b; --color-accent-2-800:#123f34; --color-accent-2-900:#0b2620;
+    }
+  </style>
+</helmet>
+<div style="min-height:100%;background:var(--color-bg);padding:32px 24px 48px;">
+  <div style="max-width:1280px;margin:0 auto;">
+
+    <div style="display:flex;align-items:baseline;justify-content:space-between;gap:16px;margin-bottom:20px;flex-wrap:wrap;">
+      <div>
+        <div style="font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--color-accent);margin-bottom:6px;">한끼픽 · 그리드 프로토타입</div>
+        <h1 style="margin:0;">오늘 뭐 먹지 고민 끝</h1>
+      </div>
+      <span class="tag tag-outline">가산디지털1로 136 · 반경 250m · 1호선 서쪽</span>
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));grid-auto-rows:minmax(150px,auto);grid-auto-flow:dense;gap:16px;">
+
+      <div class="card" style="grid-column:span 2;grid-row:span 2;padding:0;overflow:hidden;position:relative;min-height:280px;">
+        <image-slot id="mosaicHero" shape="rect" placeholder="카카오/네이버 매장 사진을 여기에 채워보세요" style="position:absolute;inset:0;width:100%;height:100%;"></image-slot>
+        <div style="position:absolute;inset:0;background:linear-gradient(to top, rgba(22,24,38,.88), rgba(22,24,38,.1) 55%, transparent);pointer-events:none;"></div>
+        <div style="position:absolute;left:20px;bottom:18px;right:20px;pointer-events:none;">
+          <div style="font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--color-accent-300);margin-bottom:6px;">한끼픽</div>
+          <div style="font-family:var(--font-heading);font-weight:500;font-size:clamp(28px,4vw,44px);line-height:1;color:var(--color-text);">오늘 뭐 먹지</div>
+        </div>
+      </div>
+
+      <div class="card" style="grid-column:span 1;padding:0;overflow:hidden;min-height:130px;position:relative;">
+        <image-slot id="mosaicMenu1" shape="rect" placeholder="오늘의 메뉴 사진" style="width:100%;height:100%;"></image-slot>
+      </div>
+
+      <div class="card" style="grid-column:span 1;grid-row:span 2;padding:0;overflow:hidden;min-height:280px;position:relative;">
+        <image-slot id="mosaicMenu2" shape="rect" placeholder="구내식당 오늘의 메뉴 사진" style="width:100%;height:100%;"></image-slot>
+      </div>
+
+      <div class="card elev-sm" style="grid-column:span 1;background:var(--color-accent-800);justify-content:center;">
+        <div class="card-kicker" style="color:var(--color-accent-100);">가산디지털단지</div>
+        <div style="font-size:22px;font-weight:600;color:var(--color-accent-100);">반경 250m</div>
+        <div style="font-size:12px;color:var(--color-accent-200);">1호선 서쪽 구역만</div>
+      </div>
+
+      <div class="card elev-sm" style="grid-column:span 1;">
+        <div class="card-kicker">형태</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;">
+          <sc-for list="{{ typeOptions }}" as="opt" hint-placeholder-count="7">
+            <button type="button" onClick="{{ opt.onClick }}" style="{{ opt.style }}">{{ opt.label }}</button>
+          </sc-for>
+        </div>
+      </div>
+
+      <div class="card elev-sm" style="grid-column:span 2;">
+        <div class="card-kicker">종류</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;">
+          <sc-for list="{{ cuisineOptions }}" as="opt" hint-placeholder-count="8">
+            <button type="button" onClick="{{ opt.onClick }}" style="{{ opt.style }}">{{ opt.label }}</button>
+          </sc-for>
+        </div>
+      </div>
+
+      <div class="card elev-sm" style="grid-column:span 2;align-items:center;justify-content:center;gap:10px;text-align:center;">
+        <button type="button" class="btn btn-primary btn-block" disabled="{{ ctaDisabled }}" onClick="{{ onRecommend }}" style="font-size:16px;padding:14px;margin:0;">오늘 뭐 먹지?</button>
+        <div style="font-size:12px;opacity:.6;">후보 {{ poolCount }}곳 중에서 무작위로 뽑아요</div>
+        <button type="button" class="btn btn-ghost" onClick="{{ onReset }}" style="font-size:12px;white-space:nowrap;">조건 초기화</button>
+      </div>
+
+      <div class="card elev-md" style="grid-column:span 2;grid-row:span 2;padding:24px;">
+        <sc-if value="{{ hasPick }}" hint-placeholder-val="{{ true }}">
+          <div style="display:flex;flex-direction:column;height:100%;">
+            <div class="card-kicker">추천메뉴</div>
+            <h2 style="margin:4px 0 6px;">{{ currentPick.name }}</h2>
+            <div style="font-size:13px;opacity:.65;margin-bottom:16px;">{{ currentPick.metaLine }}</div>
+            <span class="tag tag-accent" style="font-size:15px;padding:10px 16px;margin-bottom:14px;align-self:flex-start;">{{ currentPick.signatureMenu }}</span>
+            <div style="font-size:11px;opacity:.55;margin:6px 0 6px;">다른메뉴</div>
+            <ul style="margin:0 0 20px;padding-left:18px;font-size:13px;line-height:1.7;opacity:.85;">
+              <sc-for list="{{ currentPick.otherMenus }}" as="m" hint-placeholder-count="3">
+                <li>{{ m }}</li>
+              </sc-for>
+            </ul>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:auto;">
+              <button type="button" class="btn btn-primary" onClick="{{ onReroll }}" style="white-space:nowrap;">다시 뽑기</button>
+              <button type="button" class="btn btn-secondary" style="white-space:nowrap;">길찾기</button>
+              <button type="button" class="btn btn-secondary" style="white-space:nowrap;">지도에서 보기</button>
+            </div>
+          </div>
+        </sc-if>
+        <sc-if value="{{ noPick }}" hint-placeholder-val="{{ false }}">
+          <div style="height:100%;display:flex;align-items:center;justify-content:center;opacity:.5;font-size:14px;">조건을 고르고 버튼을 눌러보세요</div>
+        </sc-if>
+      </div>
+
+      <div class="card elev-sm" style="grid-column:span 1;grid-row:span 2;padding:0;overflow:hidden;position:relative;min-height:220px;">
+        <div class="card-kicker" style="position:absolute;top:14px;left:16px;z-index:2;">지도</div>
+        <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;">
+          <div style="position:relative;width:78%;aspect-ratio:1;border-radius:50%;border:1px dashed var(--color-divider);display:flex;align-items:center;justify-content:center;">
+            <div style="position:absolute;inset:20%;border-radius:50%;border:1px dashed var(--color-divider);"></div>
+            <div style="width:10px;height:10px;border-radius:50%;background:var(--color-accent);box-shadow:0 0 0 6px color-mix(in srgb, var(--color-accent) 25%, transparent);"></div>
+            <sc-for list="{{ mapDots }}" as="dot" hint-placeholder-count="8">
+              <div style="{{ dot.style }}"></div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+
+      <div class="card elev-sm" style="grid-column:span 1;justify-content:center;">
+        <div class="card-kicker">검색 반경</div>
+        <div style="font-size:28px;font-weight:600;">250<span style="font-size:14px;opacity:.6;">m</span></div>
+        <p class="card-body" style="margin:0;">1호선 서쪽 구역만 자동 필터</p>
+      </div>
+
+      <div class="card elev-sm" style="grid-column:1/-1;">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px;flex-wrap:wrap;gap:6px;">
+          <div class="card-kicker">주변 식당 {{ listCount }}곳</div>
+          <div style="font-size:11px;opacity:.5;">카드를 누르면 바로 미리보기, 제외 버튼으로 후보에서 뺄 수 있어요</div>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));grid-auto-flow:dense;gap:10px;margin-top:10px;">
+          <sc-for list="{{ listItems }}" as="r" hint-placeholder-count="8">
+            <div onClick="{{ r.onSelect }}" style="{{ r.cardStyle }}">
+              <image-slot id="{{ r.photoSlotId }}" shape="rounded" radius="8" placeholder="{{ r.photoPlaceholder }}" style="width:100%;height:100px;margin-bottom:8px;"></image-slot>
+              <div style="display:flex;justify-content:space-between;gap:6px;">
+                <div style="font-weight:600;font-size:13px;">{{ r.name }}</div>
+                <div style="font-size:11px;opacity:.55;white-space:nowrap;">{{ r.distance }}m</div>
+              </div>
+              <div style="font-size:11px;opacity:.6;margin:4px 0 8px;">{{ r.cuisine }} · {{ r.type }}</div>
+              <button type="button" onClick="{{ r.onToggleExclude }}" style="{{ r.excludeBtnStyle }}">{{ r.excludeLabel }}</button>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;pickAvoidsRepeat&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;추천 동작&quot;},&quot;manualPickFromList&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;추천 동작&quot;},&quot;showExcludedInList&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;목록 표시&quot;}}">
+const TYPE_LIST = ['면','밥','국물','구이','튀김','분식','기타'];
+const CUISINE_LIST = ['구내식당/한식뷔페','국밥/탕/찌개','제육/백반/정식','중식','면류/분식','돈까스/일식/양식','아시안/세계요리','간편식/식단관리'];
+
+const SEED = [
+  {id:'r1', name:'가산맘 국밥집', type:'국물', cuisine:'국밥/탕/찌개', distance:90, walk:2, signatureMenu:'돼지국밥', otherMenus:['순대국','내장국','섞어국']},
+  {id:'r2', name:'우리집 백반', type:'밥', cuisine:'제육/백반/정식', distance:120, walk:3, signatureMenu:'제육볶음', otherMenus:['고추장불고기','계란말이 정식']},
+  {id:'r3', name:'홍콩반점 가산점', type:'면', cuisine:'중식', distance:150, walk:3, signatureMenu:'짬뽕', otherMenus:['짜장면','탕수육']},
+  {id:'r4', name:'우동한그릇', type:'면', cuisine:'면류/분식', distance:80, walk:2, signatureMenu:'가마우동', otherMenus:['튀김우동','냉모밀']},
+  {id:'r5', name:'돈카츠 공방', type:'튀김', cuisine:'돈까스/일식/양식', distance:200, walk:4, signatureMenu:'등심돈카츠', otherMenus:['치즈카츠','가라아게 정식']},
+  {id:'r6', name:'반짝 구내식당', type:'밥', cuisine:'구내식당/한식뷔페', distance:60, walk:1, signatureMenu:'오늘의 정식', otherMenus:['잡곡밥 무한리필']},
+  {id:'r7', name:'포메인 아시안다이닝', type:'국물', cuisine:'아시안/세계요리', distance:250, walk:5, signatureMenu:'쌀국수', otherMenus:['팟타이','분짜']},
+  {id:'r8', name:'그린샐러드 델리', type:'기타', cuisine:'간편식/식단관리', distance:110, walk:2, signatureMenu:'닭가슴살 샐러드보울', otherMenus:['단백질쉐이크','현미주먹밥']},
+];
+
+function chipStyle(active){
+  return active
+    ? "background:var(--color-accent-800);color:var(--color-accent-100);border:1px solid var(--color-accent);padding:6px 12px;border-radius:999px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;"
+    : "background:transparent;color:var(--color-text);border:1px solid var(--color-divider);padding:6px 12px;border-radius:999px;font-size:12px;cursor:pointer;white-space:nowrap;";
+}
+function listCardStyle(active, excluded, spanCols){
+  let s = `background:var(--color-bg);border:1px solid var(--color-divider);border-radius:var(--radius-md);padding:10px 12px;cursor:pointer;grid-column:span ${spanCols};`;
+  if (active) s += "box-shadow:0 0 0 2px var(--color-accent);";
+  if (excluded) s += "opacity:.4;";
+  return s;
+}
+function excludeBtnStyle(excluded){
+  return excluded
+    ? "background:var(--color-accent-800);color:var(--color-accent-100);border:1px solid var(--color-accent);border-radius:var(--radius-sm);padding:3px 9px;font-size:11px;cursor:pointer;white-space:nowrap;min-width:fit-content;"
+    : "background:transparent;color:color-mix(in srgb, var(--color-text) 60%, transparent);border:1px solid var(--color-divider);border-radius:var(--radius-sm);padding:3px 9px;font-size:11px;cursor:pointer;white-space:nowrap;min-width:fit-content;";
+}
+
+class Component extends DCLogic {
+  state = {
+    typeFilters: [],
+    cuisineFilters: [],
+    restaurants: SEED.map(r => ({...r, excluded: false})),
+    currentPickId: SEED[5].id,
+    lastPickId: SEED[5].id,
+  };
+
+  pool() {
+    const {typeFilters, cuisineFilters, restaurants} = this.state;
+    return restaurants.filter(r =>
+      !r.excluded &&
+      (typeFilters.length === 0 || typeFilters.includes(r.type)) &&
+      (cuisineFilters.length === 0 || cuisineFilters.includes(r.cuisine))
+    );
+  }
+
+  toggleType(t) {
+    this.setState(s => ({typeFilters: s.typeFilters.includes(t) ? s.typeFilters.filter(x => x !== t) : [...s.typeFilters, t]}));
+  }
+  toggleCuisine(c) {
+    this.setState(s => ({cuisineFilters: s.cuisineFilters.includes(c) ? s.cuisineFilters.filter(x => x !== c) : [...s.cuisineFilters, c]}));
+  }
+  resetFilters() {
+    this.setState({typeFilters: [], cuisineFilters: []});
+  }
+  toggleExclude(id) {
+    this.setState(s => ({restaurants: s.restaurants.map(r => r.id === id ? {...r, excluded: !r.excluded} : r)}));
+  }
+  selectManually(id) {
+    if (this.props.manualPickFromList === false) return;
+    this.setState({currentPickId: id, lastPickId: id});
+  }
+  pickRandom() {
+    const pool = this.pool();
+    if (!pool.length) return;
+    const avoidRepeat = this.props.pickAvoidsRepeat !== false;
+    let choices = pool;
+    if (avoidRepeat && pool.length > 1) {
+      const filtered = pool.filter(r => r.id !== this.state.lastPickId);
+      if (filtered.length) choices = filtered;
+    }
+    const pick = choices[Math.floor(Math.random() * choices.length)];
+    this.setState({currentPickId: pick.id, lastPickId: pick.id});
+  }
+
+  renderVals() {
+    const {restaurants, typeFilters, cuisineFilters, currentPickId} = this.state;
+    const pool = this.pool();
+    const current = restaurants.find(r => r.id === currentPickId) || null;
+    const showExcludedInList = this.props.showExcludedInList !== false;
+    const visibleList = showExcludedInList ? restaurants : restaurants.filter(r => !r.excluded);
+
+    const typeOptions = TYPE_LIST.map(t => ({
+      label: t, style: chipStyle(typeFilters.includes(t)), onClick: () => this.toggleType(t),
+    }));
+    const cuisineOptions = CUISINE_LIST.map(c => ({
+      label: c, style: chipStyle(cuisineFilters.includes(c)), onClick: () => this.toggleCuisine(c),
+    }));
+
+    const listItems = visibleList.map((r, i) => ({
+      ...r,
+      onSelect: () => this.selectManually(r.id),
+      onToggleExclude: (e) => { e.stopPropagation(); this.toggleExclude(r.id); },
+      excludeLabel: r.excluded ? '제외됨 · 되돌리기' : '제외',
+      excludeBtnStyle: excludeBtnStyle(r.excluded),
+      cardStyle: listCardStyle(r.id === currentPickId, r.excluded, i % 5 === 0 ? 2 : 1),
+      photoSlotId: `menu-${r.id}`,
+      photoPlaceholder: `${r.name} 메뉴 사진`,
+    }));
+
+    const mapDots = restaurants.map((r, i) => {
+      const angle = (i / restaurants.length) * Math.PI * 2;
+      const rad = 26 + (i % 3) * 10;
+      const x = 50 + Math.cos(angle) * rad;
+      const y = 50 + Math.sin(angle) * rad;
+      const active = r.id === currentPickId;
+      const size = active ? 12 : 7;
+      return {
+        style: `position:absolute;left:${x}%;top:${y}%;width:${size}px;height:${size}px;border-radius:50%;background:${active ? 'var(--color-accent)' : 'var(--color-neutral-500)'};transform:translate(-50%,-50%);${active ? 'box-shadow:0 0 0 5px color-mix(in srgb, var(--color-accent) 30%, transparent);' : ''}`,
+      };
+    });
+
+    return {
+      typeOptions, cuisineOptions,
+      poolCount: pool.length,
+      ctaDisabled: pool.length === 0,
+      hasPick: !!current,
+      noPick: !current,
+      currentPick: current ? {...current, metaLine: `${current.cuisine} · ${current.type} · ${current.distance}m · 도보 약 ${current.walk}분`} : null,
+      listItems,
+      listCount: visibleList.length,
+      mapDots,
+      onRecommend: () => this.pickRandom(),
+      onReroll: () => this.pickRandom(),
+      onReset: () => this.resetFilters(),
+    };
+  }
+}
+</script>
+</body>
+</html>
