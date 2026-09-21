@@ -1,110 +1,128 @@
-# 🍽️ Lunch Menu Recommender
+# 🍽️ 오늘 뭐 먹지 (Lunch Menu Recommender)
 
-**"오늘 뭐 먹지 고민 끝"** — A smart lunch recommendation tool for the Gasan Digital office complex area in Seoul.
+**"오늘 뭐 먹지 고민 끝"** — 서울 가산디지털단지 사무실 근처를 위한 점심 메뉴 추천 도구입니다.
 
-## Overview
+## 개요
 
-This tool helps you decide what to eat for lunch by recommending nearby restaurants based on your mood and preferences. It features:
+기분과 취향에 맞춰 근처 식당을 추천해주는 도구입니다. 주요 기능:
 
-- **Smart filtering**: Multi-select by food type (면/밥/국물) and category (구내식당/한식뷔페, 국밥/탕/찌개, 제육/백반/정식, 중식, 면류/분식, 돈까스/일식/양식, 아시안/세계요리, 간편식/식단관리)
-- **Adjustable radius**: Pick a search radius from 100m to 500m in 100m steps (default 300m); changing it re-searches immediately
-- **Live restaurant data**: Real-time search using Kakao Maps API, adaptively subdividing the search area so dense areas (like Gasan) don't silently lose restaurants to Kakao's 45-result cap
-- **Intelligent filtering**: Automatically filters to restaurants on the west side of Seoul Metro Line 1 only
-- **Rich menus**: Shows recommended menu + alternative menu items for each restaurant
-- **Interactive map**: Visualize selected restaurants and walking distance estimates
-- **Manual curation**: Override automatic categorization with customizable tags and menu data
-- **Persistent preferences**: All user edits saved to browser local storage
+- **스마트 필터링**: 형태(면/밥/국물/구이/튀김/분식/기타)와 종류(구내식당/한식뷔페, 국밥/탕/찌개, 제육/백반/정식, 중식, 면류/분식, 돈까스/일식/양식, 아시안/세계요리, 간편식/식단관리)로 다중 선택 필터링
+- **반경 조절**: 100m 단위로 100m~500m 범위에서 검색 반경 선택(기본값 300m); 변경 시 즉시 재검색
+- **실시간 식당 데이터**: 카카오맵 API로 실시간 검색하되, 검색 영역을 적응적으로 세분화해서 가산처럼 밀집된 지역에서도 카카오의 45건 제한 때문에 식당이 조용히 누락되지 않도록 함
+- **지능형 필터링**: 지하철 1호선 서쪽에 위치한 식당만 자동으로 걸러냄
+- **실제 메뉴 정보**: 카카오/네이버 플레이스에 등록된 실제 메뉴판을 가져와 표시하고, 없으면 카테고리명·메뉴명 키워드로 자동 추정
+- **구내식당·한식뷔페 "오늘의 메뉴" 사진 자동 인식**: 카카오톡 채널(플러스친구)에 올라오는 오늘자 메뉴 사진을 채널ID 하나만 입력하면 자동으로 찾아서 보여줌 (아래 [구내식당 메뉴 자동 인식](#구내식당한식뷔페-오늘의-메뉴-자동-인식) 참고)
+- **인스타그램 전용 매장 대응**: 카카오톡 채널이 없는 매장은 사람이 매일 사진을 붙여넣거나(오늘의 메뉴), 요일별 5칸에 주간 식단표를 나눠 붙여넣는 방식으로 대응
+- **인터랙티브 지도**: 선택된 식당과 도보 예상 시간을 지도로 시각화
+- **수동 큐레이션**: 자동 분류를 커스텀 태그와 메뉴 데이터로 직접 덮어쓰기 가능, 폐업 등으로 카카오에 계속 남아있는 상점은 포함/제외로 보정 가능(모든 사용자에게 공유됨)
+- **사진 리뷰**: 식당마다 사진+텍스트로 짧은 리뷰(댓글)를 남기고 볼 수 있음
+- **"우리 오늘 뭐먹지" 팀 모드**: 초대 코드로 방을 만들어 팀원들이 각자 조건(제외 항목, 반경)을 제출하면 다같이 갈 만한 곳을 함께 추천받음
+- **설정 저장**: 개인 편집 내용은 브라우저 로컬 스토리지에, 팀 공유가 필요한 정보(폐업 여부, 리뷰, 팀 모드 방 상태)는 Cloudflare Worker/KV에 저장됨
 
-## Quick Start
+## 빠른 시작
 
-### Basic Usage
-1. Open `lunch-recommender.html` in a web browser
-2. (Optional) Select filter criteria using the condition panel on the left
-3. Click "오늘 뭐 먹지?" (What should I eat today?) to get a recommendation
-4. View the map, menu details, and recommended dish
-5. Use "다시 뽑기" to get another recommendation
+### 기본 사용법
+1. `lunch-recommender.html`을 웹 브라우저로 엽니다 (또는 배포된 URL 접속)
+2. (선택) 왼쪽 조건 패널에서 필터 조건을 선택합니다
+3. "오늘 뭐 먹지?" 버튼을 눌러 추천을 받습니다
+4. 지도, 실제 메뉴판, 추천 메뉴를 확인합니다
+5. "다시 뽑기"로 다른 추천을 받거나, "댓글 남기기"로 후기를 남깁니다
+6. 팀원들과 같이 정하고 싶다면 "우리 오늘 뭐먹지"에서 방을 만들어 초대 코드를 공유합니다
 
-### Configuration
+### 환경 설정
 
-You need to add your Kakao Maps JavaScript API key:
+이 앱은 두 개의 배포 대상으로 구성됩니다 — 직접 포크해서 쓰려면 둘 다 필요합니다.
 
-1. Get a key from [Kakao Developers Console](https://developers.kakao.com)
-2. Open `lunch-recommender.html` and find the `CONFIG` section near the top
-3. Replace `'YOUR_KAKAO_JAVASCRIPT_KEY'` with your actual key:
+**1) `lunch-recommender.html` (프론트엔드, 정적 파일)**
+
+카카오맵 JavaScript API 키를 등록해야 합니다:
+
+1. [카카오 디벨로퍼스](https://developers.kakao.com)에서 키를 발급받습니다
+2. `lunch-recommender.html`을 열어 상단 근처의 `CONFIG` 섹션을 찾습니다
+3. `CONFIG.KAKAO_JS_KEY`를 실제 키로 교체합니다:
    ```javascript
    CONFIG.KAKAO_JS_KEY = 'your-actual-key-here'
    ```
+4. **중요**: 배포할 도메인을 카카오 디벨로퍼스 콘솔에 등록해야 합니다:
+   - 로컬 테스트용: `http://localhost:8000` (또는 사용 중인 포트)
+   - GitHub Pages용: `https://yourusername.github.io`
+   - 커스텀 도메인용: `https://yourdomain.com`
 
-4. **Important**: Register your deployment domain(s) in Kakao Developers Console:
-   - For local testing: `http://localhost:8000` (or your port)
-   - For GitHub Pages: `https://yourusername.github.io`
-   - For custom domain: `https://yourdomain.com`
-   
-   If domains aren't registered, the app falls back to demo data mode (red banner at top).
+   도메인이 등록돼 있지 않으면 앱이 데모 데이터 모드로 자동 전환됩니다(상단에 빨간 배너 표시).
 
-## Technical Details
+**2) `kakao-menu-proxy.worker.js` (백엔드, Cloudflare Worker)**
 
-### Architecture
+카카오맵/카카오톡 채널/네이버 플레이스는 브라우저에서 직접 CORS로 호출할 수 없는 비공식 API라, 이 Worker가 대신 호출해서 중계합니다. 팀 모드 방 상태, 폐업 여부 공유, 사진 리뷰, 구내식당 수동/주간 사진도 이 Worker가 Cloudflare KV에 저장합니다.
+
+1. Cloudflare 계정에서 새 Worker를 만들고 `kakao-menu-proxy.worker.js` 내용을 붙여넣습니다
+2. Worker Settings → Bindings에서 KV Namespace 두 개를 만들어 바인딩합니다: `ROOMS`(팀 모드, 6시간 TTL), `REVIEWS`(리뷰/폐업 공유/구내식당 사진, 영구 보관 — 이름은 리뷰용으로 시작했지만 여러 기능이 재사용 중)
+3. Worker Settings → Triggers → Cron Triggers에 `0 0 * * *`(UTC 0시 = KST 9시)를 등록하면 구내식당 채널 캐시를 매일 아침 미리 데워둡니다(선택사항, 없어도 on-demand로 동작함)
+4. 배포된 Worker URL을 `lunch-recommender.html`의 `CONFIG.MENU_PROXY_URL`에 설정합니다
+
+## 기술 상세
+
+### 아키텍처
 
 ```
-lunch-recommender.html (single file, no build step)
-├── HTML structure (filterable conditions, result card, map panel)
-├── CSS styling (3-column responsive grid layout)
-└── JavaScript logic
-    ├── Kakao SDK integration (live API calls)
-    ├── Restaurant filtering & randomization
-    ├── Menu data management (localStorage)
-    └── Map rendering & interaction
+lunch-recommender.html (프론트엔드, 단일 파일, 빌드 과정 없음)
+├── HTML 구조 (필터 조건, 결과 카드, 지도 패널, 정보 편집 패널)
+├── CSS 스타일 (3단 반응형 그리드 레이아웃)
+└── JavaScript 로직
+    ├── 카카오 SDK 연동 (실시간 API 호출)
+    ├── 식당 필터링 및 랜덤 선택
+    ├── 메뉴 데이터 관리 (localStorage + Worker 프록시)
+    ├── 팀 모드 / 리뷰 / 폐업 공유 상태 (Worker API 호출)
+    └── 지도 렌더링 및 인터랙션
+
+kakao-menu-proxy.worker.js (백엔드, Cloudflare Worker)
+├── 카카오 place-api 메뉴 프록시 (CORS 우회)
+├── 네이버 place 메뉴 프록시 (APOLLO_STATE 파싱)
+├── 구내식당/한식뷔페 "오늘의 메뉴" 사진 조회 (카카오톡 채널)
+├── 구내식당 수동/주간 사진 업로드·조회 (REVIEWS KV)
+├── 팀 모드 방 생성/참여/조회/갱신 (ROOMS KV)
+├── 자동/포함/제외 공유 상태 (REVIEWS KV)
+└── 사진 리뷰 등록/조회/삭제 (REVIEWS KV)
 ```
 
-### Key Components
+### 핵심 구성 요소
 
-**Kakao Maps Integration**
-- `Geocoder`: Converts office address to coordinates
-- `Places.categorySearch()`: Finds restaurants within the user-selected radius (100–500m), via `deepCategorySearch` — recursively subdividing any circle that hits Kakao's 45-result cap until it doesn't (or a depth/min-radius limit is reached)
-- `Places.keywordSearch()`: Detects Line 1 boundary points for west-side filtering
-- Cross-product algorithm: Mathematically determines which side of Line 1 each restaurant is on
+**카카오맵 연동**
+- `Geocoder`: 사무실 주소를 좌표로 변환
+- `Places.categorySearch()`: 사용자가 선택한 반경(100~500m) 내 식당 검색. `deepCategorySearch`를 통해 카카오의 45건 제한에 걸리는 원을 그 아래로 갈 때까지 재귀적으로 세분화함(깊이/최소 반경 한계에 도달할 때까지)
+- `Places.keywordSearch()`: 서쪽 필터링을 위해 지하철 1호선 경계 지점을 탐지
+- 외적(cross-product) 알고리즘: 각 식당이 1호선의 어느 쪽에 있는지 수학적으로 판정
 
-**Data Flow**
-- Live restaurants from Kakao API
-- Menu categorization via keyword rules (~20 heuristics)
-- User overrides stored in `localStorage` by restaurant ID
-- Edits persist across re-searches
+**메뉴 데이터 흐름**
+- 카카오 place-api(panel3) 또는 네이버 place 메뉴 페이지에서 실제 메뉴판을 가져옴(둘 다 Worker 프록시 경유)
+- 실제 메뉴가 없으면 카테고리명/메뉴명 키워드 규칙(`TAG_RULES`, `CUISINE_CATEGORY_KEYWORDS`)으로 형태·종류를 자동 추정
+- 사용자가 덮어쓴 태그/메뉴는 식당 ID 기준으로 `localStorage`에 저장되어 재검색해도 유지됨
+- 메뉴 판정 로직이 바뀌면 `TAG_RULES_VERSION`을 올려서 캐시된 옛 판정이 재사용되지 않도록 함
 
-**Fallback Mode**
-- If Kakao SDK fails to load (e.g., CSP restrictions on Claude Artifact), automatically switches to demo data
-- Red banner warns when in demo mode
-- No user interaction needed — seamless fallback
+**구내식당/한식뷔페 "오늘의 메뉴" 자동 인식**
+- 많은 구내식당은 메뉴를 텍스트가 아니라 카카오톡 채널(플러스친구) 사진으로 올림 — 세 가지 패턴을 모두 자동 판별함
+- 프로필 사진 자체를 그날 메뉴로 바꾸는 곳, 채널 "소식"(포스트)에 날짜 제목을 달아 매일 올리는 곳("N월 N일" 형식이면 정확 매칭), 날짜 표기가 다르거나 최신 글이 메뉴가 아닌 곳(제목의 '오늘'/'메뉴'/날짜 숫자 키워드 점수로 추정)
+- 채널ID 하나만 "정보 편집" 패널에 입력하면 위 세 패턴 중 어느 것이든 자동으로 판별됨 — 사용자가 패턴을 직접 고를 필요 없음
+- 인스타그램에만 올리는 매장은 자동 수집이 사실상 불가능해(공개 API 없음/로그인 필요), 사람이 매일 사진을 붙여넣거나(Ctrl+V) 요일별 5칸에 주간 식단표를 나눠 붙여넣는 방식으로 대응
 
-### Reference Coordinates
+**팀 모드 & 공유 상태**
+- "우리 오늘 뭐먹지": 방을 만들면 6자리 초대 코드가 발급되고, 팀원들이 각자 제외 조건·반경을 제출하면 모두의 조건을 만족하는 곳을 함께 추천(Cloudflare KV, 6시간 뒤 자동 만료)
+- 폐업 등으로 카카오에 계속 남아있는 상점은 한 사람이 "제외" 처리하면 모든 사용자에게 공유되어 다시 뜨지 않음
+- 식당마다 사진+텍스트 리뷰를 남길 수 있고, 본인이 남긴 것만 삭제 가능(기기별 익명 토큰으로 식별)
 
-- **Office location**: 서울 금천구 가산디지털1로 136
-- **Search radius**: user-selectable, 100–500m in 100m steps (default 300m; saved to `localStorage`)
-- **Filter boundary**: Seoul Metro Line 1 (automatic via cross-product calculation)
+**폴백 모드**
+- 카카오 SDK 로드에 실패하면(예: Claude Artifact의 CSP 제한) 자동으로 데모 데이터로 전환
+- 데모 모드일 때는 빨간 배너로 안내
+- 사용자가 별도로 조작할 필요 없이 매끄럽게 전환됨
 
-### Data Structure
+### 기준 좌표
 
-Result card displays:
-```javascript
-{
-  name: 'Restaurant Name',
-  category: '중식',           // e.g., Chinese
-  type: '면요리',             // e.g., noodles
-  distance: 90,              // meters
-  walkMinutes: 2,            // estimated walking time
-  recommendedMenu: 'Dish',   // primary recommendation
-  otherMenus: ['Menu1', 'Menu2', ...],
-  kakao: {
-    placeId: '...',
-    placeUrl: '...',         // "지도에서 보기"
-    directionsUrl: '...'     // "길찾기"
-  }
-}
-```
+- **사무실 위치**: 서울 금천구 가산디지털1로 136
+- **검색 반경**: 사용자가 100~500m 사이에서 100m 단위로 선택 가능(기본값 300m, `localStorage`에 저장됨)
+- **필터 경계**: 지하철 1호선(외적 계산으로 자동 판정)
 
-## Deployment
+## 배포
 
-### Local Testing
+### 로컬 테스트
 ```bash
 # Python 3
 python -m http.server 8000
@@ -112,107 +130,104 @@ python -m http.server 8000
 # Node.js
 npx http-server .
 ```
-Then visit `http://localhost:8000/lunch-recommender.html`
+이후 `http://localhost:8000/lunch-recommender.html`로 접속합니다. (팀 모드·리뷰·구내식당 메뉴 등 Worker 연동 기능을 로컬에서 쓰려면 `CONFIG.MENU_PROXY_URL`이 실제 배포된 Worker를 가리켜야 합니다.)
 
-### GitHub Pages
+### GitHub Pages (`lunch-recommender.html`)
 
-1. Push to your repository
-2. Enable GitHub Pages in Settings → Pages → Deploy from branch
-3. Select `main` branch and `/root`
-4. Register `https://yourusername.github.io` in Kakao Developers
+1. 저장소에 푸시합니다
+2. Settings → Pages → Deploy from branch에서 GitHub Pages를 활성화합니다
+3. `main` 브랜치와 `/root`를 선택합니다
+4. 카카오 디벨로퍼스에 `https://yourusername.github.io`를 등록합니다
 
-### Custom Domain
-Register your domain in Kakao Developers Console and deploy as needed.
+이 저장소는 `main` 브랜치 푸시만으로 자동 배포됩니다(별도 빌드/CI 없음).
 
-## Features & Editing
+### Cloudflare Workers (`kakao-menu-proxy.worker.js`)
 
-### Restaurant List Management
+GitHub Pages와 달리 **git push로 자동 배포되지 않습니다.** Cloudflare 대시보드에서 코드를 붙여넣거나 `wrangler deploy`로 직접 배포해야 합니다(이 저장소에는 `wrangler.toml`이 없음). [환경 설정](#환경-설정)의 2번 항목을 참고하세요.
 
-The accordion panel at the bottom shows all nearby restaurants:
-- View restaurant details (name, category, distance, menus)
-- Edit tags, recommended dish, and other menu items
-- Toggle inclusion/exclusion for boundary corrections
-- All changes saved to local storage
+### 커스텀 도메인
+카카오 디벨로퍼스 콘솔에 도메인을 등록하고 필요에 따라 배포합니다.
 
-### Filter Categories
+## 기능 및 편집
 
-**Food Type (형태)**: 면 · 밥 · 국물 · 구이 · 튀김 · 분식 · 기타
+### 식당 목록 관리 ("정보 편집" 패널)
 
-**Category (종류)**: 구내식당/한식뷔페 · 국밥/탕/찌개 · 제육/백반/정식 · 중식 · 면류/분식 · 돈까스/일식/양식 · 아시안/세계요리 · 간편식/식단관리 — grouped by lunch-decision style (soup vs. set-meal vs. quick bite) rather than plain country-of-origin, since that's what actually matters when picking a lunch spot near Gasan
+하단 아코디언 패널에서 주변 식당을 모두 확인하고 편집할 수 있습니다:
+- 식당 상세 정보 확인(이름, 카테고리, 거리, 메뉴)
+- 태그, 추천 메뉴, 다른 메뉴 항목 편집
+- 경계 보정을 위한 자동/포함/제외 토글 (폐업 등은 모두에게 공유됨)
+- 네이버 place id, 카카오톡 채널ID 등록(실제 메뉴/오늘의 메뉴 사진 자동 조회용)
+- 구내식당 오늘의 메뉴 사진 직접 붙여넣기, 요일별 주간 식단표 5칸 등록 및 등록 여부 확인
+- 모든 개인 편집 내용은 로컬 스토리지에, 공유가 필요한 값은 Worker/KV에 저장됨
 
-All filters are optional (multi-select). Leave empty to see all restaurants.
+### 필터 카테고리
 
-## Design & Styling
+**형태**: 면 · 밥 · 국물 · 구이 · 튀김 · 분식 · 기타
 
-- **Layout**: 3-column grid (1180px default) → responsive single-column (< 1024px)
-- **Typography**: Pretendard font family
-- **Accent color**: Deep teal (#1f8a70)
-- **Tokens**: See `UI-REDESIGN-SPEC.md` for complete design system
+**종류**: 구내식당/한식뷔페 · 국밥/탕/찌개 · 제육/백반/정식 · 중식 · 면류/분식 · 돈까스/일식/양식 · 아시안/세계요리 · 간편식/식단관리 — 단순 원산지 국가별 분류가 아니라 점심을 고를 때 실제로 중요한 기준(국물류인지, 백반 스타일인지, 간단히 먹을지)으로 그룹화함
 
-## Known Limitations
+모든 필터는 선택 사항(다중 선택 가능)입니다. 아무것도 선택하지 않으면 모든 식당이 표시됩니다.
 
-1. **Kakao 45-item cap**: The Places API returns max 45 results per 3 pages for any single search circle. Gasan Digital Complex is dense enough to hit this even at 200m radius — verified directly against the Kakao REST API, the old fixed 5-point grid missed 44% of in-radius restaurants at 400m and 59% at 500m. The app now recursively subdivides any capped circle (`deepCategorySearch`) until it isn't, which matched the ground truth in testing up to 500m. If an extremely dense area still hits the depth/min-radius limit while capped, the UI shows a "누락 가능성" warning in the restaurant list panel and reports the total count found so you can sanity-check against Naver/Kakao Maps yourself.
-   - Workaround: Use filters, manually add via the list panel, or reduce the radius
+## 디자인 & 스타일
 
-2. **No menu data from API**: Kakao Places API doesn't provide menu information.
-   - Solution: App uses keyword-based heuristics + user edits (localStorage)
+- **레이아웃**: 3단 그리드(기본 1180px) → 반응형 1단 컬럼(< 1024px)
+- **폰트**: Pretendard
+- **강조 색상**: 딥 틸(#1f8a70)
+- **디자인 토큰**: 전체 디자인 시스템은 `UI-REDESIGN-SPEC.md` 참고
 
-3. **Data freshness**: Restaurant closures/reopenings may not reflect immediately.
-   - Recommendation: Verify on the map link before visiting
+## 알려진 제한사항
 
-4. **Demo mode on Claude Artifact**: Due to CSP restrictions, the Claude Artifact version always shows demo data.
-   - Real data: Deploy from GitHub Pages or own domain
+1. **카카오 45건 제한**: Places API는 검색 원 하나당 최대 3페이지, 45건까지만 결과를 돌려줍니다. 가산디지털단지는 200m 반경에서도 이 제한에 걸릴 만큼 밀집돼 있습니다 — 카카오 REST API로 직접 검증한 결과, 예전의 고정 5-포인트 그리드 방식은 400m에서 반경 내 식당의 44%, 500m에서는 59%를 놓쳤습니다. 이제 앱은 제한에 걸린 원을 걸리지 않을 때까지 재귀적으로 세분화하며(`deepCategorySearch`), 500m까지 실제 데이터와 일치하는 것을 테스트로 확인했습니다. 극히 밀집된 지역이라 세분화 깊이/최소 반경 한계에 도달했는데도 여전히 제한에 걸린 경우엔, 식당 목록 패널에 "누락 가능성" 경고와 함께 찾은 총 개수를 표시해 네이버/카카오맵과 직접 비교해볼 수 있게 합니다.
+   - 우회 방법: 필터를 사용하거나, 목록 패널에서 수동으로 추가하거나, 반경을 줄이세요
 
-5. **Email verification issue**: The original `qoxoba/notion` repo sync is blocked by email authentication.
-   - Status: Currently using `doxoba/vibecoding` as the canonical repository
+2. **구내식당 메뉴 사진 자동 인식은 최선의 추정**: 카카오톡 채널 API가 문서화되지 않은 비공식 API라 채널 UI 구조가 바뀌면 조용히 실패할 수 있고, 정확한 날짜 매칭에 실패했을 때 쓰는 키워드 점수 추정(`source: 'post-guess'`)도 100% 확신은 아닙니다.
+   - 완화책: 매칭에 쓰인 게시물 제목을 화면에 함께 보여주고, 정확 매칭(✅)과 추정(🔎)을 구분해 표시함
 
-## API Keys & Secrets
+3. **인스타그램 전용 매장은 자동 수집 불가**: 로그인 없는 공개 API가 없어 자동화가 사실상 불가능합니다(계정 정지 위험이 있는 로그인 세션 크롤링은 배제함).
+   - 해결책: 사람이 매일 사진을 직접 붙여넣는 수동 등록 방식 제공
 
-**Kakao JavaScript Key**: `9394ac1268768ad4accfdf8623a92f16`
-- Used for: Geocoder, Places API, Map rendering
-- Location: Set in `CONFIG.KAKAO_JS_KEY` inside HTML
+4. **데이터 최신성**: 식당 폐업/재개업이 즉시 반영되지 않을 수 있습니다.
+   - 권장 사항: 방문 전 지도 링크에서 다시 확인하거나, 폐업 확인 시 자동/포함/제외 토글로 공유해주세요
 
-*Note: REST API key is not needed for this app*
+5. **Claude Artifact에서는 데모 모드**: CSP 제한 때문에 Claude Artifact 버전은 항상 데모 데이터를 표시하고, 팀 모드/리뷰 등 Worker 연동 기능도 동작하지 않습니다.
+   - 실제 데이터를 보려면: GitHub Pages나 자체 도메인으로 배포하세요
 
-## TODO
+## API 키 & 비밀정보
 
-- [ ] Fill in actual Kakao key in `CONFIG.KAKAO_JS_KEY`
-- [ ] Test locally after key setup
-- [ ] Push to GitHub (`doxoba/vibecoding`)
-- [ ] Enable GitHub Pages deployment
-- [ ] Register GitHub Pages domain in Kakao Developers Console
-- [ ] Verify live data appears (no red banner)
-- [ ] Manually edit restaurant tags/menus based on real restaurant data
-- [ ] Mark boundary restaurants with manual include/exclude toggles
-- [ ] (Optional) Deploy to custom domain if needed
+**카카오 JavaScript 키**: `9394ac1268768ad4accfdf8623a92f16`
+- 용도: Geocoder, Places API, 지도 렌더링
+- 위치: HTML 내부 `CONFIG.KAKAO_JS_KEY`에 설정됨
 
-## Project Files
+*참고: 이 앱에는 REST API 키가 필요 없습니다(Worker가 대신 호출하는 것도 모두 비공식 공개 엔드포인트라 별도 키가 필요 없음)*
+
+## 프로젝트 파일
 
 ```
-vibecoding/
-├── README.md                    (this file)
-├── lunch-recommender.html       (main app - single file)
-├── UI-REDESIGN-SPEC.md         (design specification & token reference)
-├── HANDOFF.md                  (project context for handoff)
-└── .git/                        (git repository)
+today_lunch/
+├── README.md                    (이 파일)
+├── lunch-recommender.html       (프론트엔드 - 단일 파일)
+├── kakao-menu-proxy.worker.js   (백엔드 - Cloudflare Worker)
+├── UI-REDESIGN-SPEC.md         (디자인 스펙 & 토큰 레퍼런스)
+├── HANDOFF.md                  (프로젝트 핸드오프용 상세 컨텍스트 문서)
+└── .git/                        (git 저장소)
 ```
 
-## Related Resources
+## 관련 리소스
 
-- **Claude Artifact Preview**: https://claude.ai/code/artifact/31bc9d8b-acbd-44e1-92fc-1c3a5220b6d5 (demo data only due to CSP)
-- **Kakao Developers**: https://developers.kakao.com
-- **Deployed app** (once configured): `https://doxoba.github.io/lunch-recommender.html`
+- **Claude Artifact 미리보기**: https://claude.ai/code/artifact/31bc9d8b-acbd-44e1-92fc-1c3a5220b6d5 (CSP 제한으로 데모 데이터만 표시)
+- **카카오 디벨로퍼스**: https://developers.kakao.com
+- **배포된 앱**: `https://doxoba.github.io/today_lunch/lunch-recommender.html`
 
-## Support & Questions
+## 지원 & 문의
 
-For issues or improvements:
-1. Check if it's in the [Known Limitations](#known-limitations) section
-2. Review `UI-REDESIGN-SPEC.md` for design & interaction details
-3. See `HANDOFF.md` for additional technical context
-4. Check browser console (F12) for debug logs during development
+문제가 있거나 개선하고 싶은 점이 있다면:
+1. [알려진 제한사항](#알려진-제한사항) 섹션에 이미 나와 있는지 확인하세요
+2. 디자인 & 인터랙션 상세는 `UI-REDESIGN-SPEC.md`를 참고하세요
+3. 기능별 설계 배경·의사결정 히스토리는 `HANDOFF.md`를 참고하세요(가장 최신 상태를 반영하는 문서입니다)
+4. 개발 중에는 브라우저 콘솔(F12)에서 디버그 로그를 확인하세요
 
 ---
 
-**Status**: ✅ Feature complete | ⏳ Awaiting deployment & Kakao key setup | 📝 Ready for menu curation
+**상태**: ✅ 실사용 중. 새 기능이 추가될 때마다 `HANDOFF.md`와 이 README가 함께 갱신됩니다.
 
-Made with ❤️ for the Gasan Digital office team.
+가산디지털단지에서 일하는 사람들을 위해 ❤️를 담아 만들었습니다.
