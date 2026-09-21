@@ -1475,10 +1475,21 @@
     state.restaurants.forEach(function(r){
       if(r.lat == null || r.lng == null) return;
       var pos = new kakao.maps.LatLng(r.lat, r.lng);
-      var marker = new kakao.maps.Marker({ position:pos, map:map, opacity: r.isIncluded ? 1 : 0.35 });
+      var marker = new kakao.maps.Marker({ position:pos, map:map, image:getRegularMarkerImage(), opacity: r.isIncluded ? 1 : 0.35 });
       var iw = new kakao.maps.InfoWindow({ content:'<div style="padding:4px 8px;font-size:12px;white-space:nowrap;">'+r.name+'</div>' });
       kakao.maps.event.addListener(marker, 'click', function(){ iw.open(map, marker); });
     });
+  }
+
+  // 일반 매장 핀: 흰 배경 + 틸 테두리(아웃라인 스타일). 추천/선택된 매장은 getHighlightMarkerImage()로 별도 강조.
+  var regularMarkerImage = null;
+  function getRegularMarkerImage(){
+    if(regularMarkerImage) return regularMarkerImage;
+    var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="26" height="34" viewBox="0 0 36 46">' +
+      '<path d="M18 0C8 0 0 8 0 18c0 12.5 18 28 18 28s18-15.5 18-28C36 8 28 0 18 0z" fill="#ffffff" stroke="#1f8a70" stroke-width="3"/></svg>';
+    var uri = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+    regularMarkerImage = new kakao.maps.MarkerImage(uri, new kakao.maps.Size(26,34), { offset: new kakao.maps.Point(13,34) });
+    return regularMarkerImage;
   }
 
   // 추천 결과 마커를 눈에 띄는 핀으로 표시하고 지도 중심을 그쪽으로 이동시킨다.
@@ -1486,8 +1497,7 @@
   function getHighlightMarkerImage(){
     if(highlightMarkerImage) return highlightMarkerImage;
     var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="36" height="46" viewBox="0 0 36 46">' +
-      '<path d="M18 0C8 0 0 8 0 18c0 12.5 18 28 18 28s18-15.5 18-28C36 8 28 0 18 0z" fill="#1f8a70" stroke="#ffffff" stroke-width="2"/>' +
-      '<circle cx="18" cy="18" r="7" fill="#ffffff"/></svg>';
+      '<path d="M18 0C8 0 0 8 0 18c0 12.5 18 28 18 28s18-15.5 18-28C36 8 28 0 18 0z" fill="#136a53" stroke="#ffffff" stroke-width="3"/></svg>';
     var uri = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
     highlightMarkerImage = new kakao.maps.MarkerImage(uri, new kakao.maps.Size(36,46), { offset: new kakao.maps.Point(18,46) });
     return highlightMarkerImage;
