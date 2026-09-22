@@ -1521,7 +1521,12 @@
   // 태깅된 메뉴가 박혀있던 문제가 있었음).
   // v3: 메뉴 항목에 photoUrl을 추가로 캐싱하기 시작해서, 이 필드가 없는 v2 캐시가 남아있으면
   // 목록 타일이 사진 대신 색블록으로 계속 보이는 문제가 있었다 — 버전을 올려 즉시 재조회시킨다.
-  var TAG_RULES_VERSION = 'v3';
+  // v4: 식당 대표 사진(menuPhotoUrl/representativePhotoUrl) 도입 시점에 Worker의 엣지 캐시가
+  // colo(거점)별로 따로 캐싱돼 있어(카카오맵 실제로는 사진이 있는데도) 이 필드가 빠진 옛 응답이
+  // 그대로 캐싱된 브라우저가 있었다(2026-09-22, 한려수도 등에서 실사용 중 발견 — Worker 쪽
+  // KAKAO_MENU_SCHEMA_VERSION도 같이 올려서 재발 방지). 이미 photoUrl:null로 캐싱해버린 기기가
+  // 최대 24시간 계속 색블록만 보게 되는 걸 막기 위해 버전을 올려 즉시 재조회시킨다.
+  var TAG_RULES_VERSION = 'v4';
   function fetchMenuFor(placeId){ return fetchMenuFrom('placeId', placeId, 'kakao-'+TAG_RULES_VERSION, 'kakao-live'); }
   function fetchNaverMenuFor(placeId){ return fetchMenuFrom('naverPlaceId', placeId, 'naver-'+TAG_RULES_VERSION, 'naver-live'); }
   // 네이버 지도 URL에서 place id를 뽑아낸다. 검색결과를 거쳐 들어온 리다이렉트 URL

@@ -14,6 +14,13 @@
 
 const KAKAO_API = 'https://place-api.map.kakao.com/places/panel3/';
 const CACHE_SECONDS = 60 * 60 * 24; // 1일 — 같은 식당 반복 조회 시 카카오 재호출 방지
+// Cloudflare의 Cache API는 colo(엣지 거점)별로 따로 캐싱된다 — 이 응답 모양을 바꾸는 배포를 해도
+// 이미 예전 코드로 캐싱해둔 colo는 최대 24시간 동안 그 옛 응답을 계속 돌려준다(같은 placeId로
+// 요청해도 요청이 어느 colo에 도착하느냐에 따라 결과가 달라 보임 — 2026-09-22, representativePhotoUrl
+// 필드를 추가했을 때 실사용 중 발견됨: 같은 식당인데 새로 값이 있다가/없다가 했음). 네이버 라우트의
+// NAVER_MENU_SCHEMA_VERSION과 같은 패턴으로, 캐시에 반영되는 응답 모양이 바뀔 때마다 이 값을 올려서
+// 옛 colo 캐시를 새 캐시 키로 무효화시킨다(카카오로 나가는 실제 요청 URL과는 무관 — 캐시 키에만 씀).
+const KAKAO_MENU_SCHEMA_VERSION = 'v2';
 
 // ============ 구내식당/한식뷔페 "오늘의 메뉴" 이미지 (카카오톡 채널 프로필 사진) ============
 // 많은 구내식당/한식뷔페는 그날그날 메뉴를 텍스트가 아니라 카카오톡 채널(플러스친구) 프로필
@@ -159,7 +166,8 @@ export default {
 
     // Cloudflare Cache API로 응답 캐싱 (같은 placeId 반복 요청 시 카카오 재호출 방지)
     const cache = caches.default;
-    const cacheKey = new Request(url.toString(), request);
+    const cacheUrl = url.toString() + (url.search ? '&' : '?') + '_cv=' + KAKAO_MENU_SCHEMA_VERSION;
+    const cacheKey = new Request(cacheUrl, request);
     const cached = await cache.match(cacheKey);
     if (cached) return cached;
 
