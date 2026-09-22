@@ -129,6 +129,24 @@
   .chip.active{background:var(--accent); color:var(--ink); border-color:var(--ink); font-weight:600;}
   .chip:disabled{opacity:.5; cursor:not-allowed;}
   .chip:disabled:hover{border-color:var(--ink); color:var(--ink);}
+  .menu-search-box{
+    display:flex; align-items:center; gap:8px; background:#fff; border:2px solid var(--ink);
+    border-radius:var(--r-pill); padding:6px 8px 6px 14px;
+  }
+  .menu-search-box i{color:var(--text-faint); flex:none;}
+  .menu-search-box input[type="search"]{
+    flex:1; min-width:0; border:none; outline:none; background:none;
+    font-family:var(--f-body); font-size:14px; color:var(--text);
+  }
+  .menu-search-box input[type="search"]::placeholder{color:var(--text-faint);}
+  .menu-search-box input[type="search"]::-webkit-search-cancel-button{display:none;}
+  .menu-search-clear{
+    background:none; border:none; color:var(--text-faint); font-size:18px; line-height:1;
+    cursor:pointer; padding:2px 6px; flex:none;
+  }
+  .menu-search-clear:hover{color:var(--pink);}
+  .menu-search-clear[hidden]{display:none;}
+  .menu-search-widen{margin-top:10px;}
   .filter-foot{margin-top:auto; display:flex; flex-direction:column; gap:10px;}
   .reset-link{
     background:none; border:none; color:var(--text-faint); text-decoration:underline;
@@ -542,8 +560,14 @@
 
   <details class="accordion" open>
     <summary>주변 식당 목록 · 정보 편집<i class="ph ph-caret-down" aria-hidden="true"></i></summary>
+    <div class="menu-search-box" style="margin:12px 16px 0;">
+      <i class="ph ph-magnifying-glass" aria-hidden="true"></i>
+      <input type="search" id="menuSearchInput" placeholder="메뉴 이름으로 검색 (예: 알밥)" autocomplete="off">
+      <button type="button" class="menu-search-clear" id="menuSearchClear" hidden aria-label="검색어 지우기">×</button>
+    </div>
     <div class="chips" id="listCategoryChips" style="margin:12px 16px 0;"></div>
-    <p class="modal-help" style="margin:6px 16px 0;">이 필터는 아래 목록을 훑어보는 용도예요 — 위쪽 "오늘 뭐 먹지?" 추천 결과에는 영향을 주지 않아요.</p>
+    <p class="modal-help" id="listCategoryHelp" style="margin:6px 16px 0;">이 필터는 아래 목록을 훑어보는 용도예요 — 위쪽 "오늘 뭐 먹지?" 추천 결과에는 영향을 주지 않아요.</p>
+    <p class="modal-help" id="menuSearchNote" hidden style="margin:6px 16px 0;">메뉴 검색 중에는 종류/형태/카테고리 필터를 무시하고 반경 내 전체 식당에서 찾아요 — 다만 메뉴 정보를 아직 못 가져온 식당은 검색에 안 걸릴 수 있어요.</p>
     <div class="banner" id="searchIncompleteWarning" hidden style="margin:12px 16px 0;">
       ⚠️ 이 반경은 상점이 워낙 밀집해 있어(카카오 API 45건 제한) 일부가 누락됐을 수 있어요. 반경을 줄이거나, 아래에서 직접 확인해 빠진 식당은 없는지 대조해보세요.
     </div>
@@ -629,13 +653,17 @@
     return CUISINE_TILE_COLORS[(idx < 0 ? 0 : idx) % CUISINE_TILE_COLORS.length];
   }
   function cuisineTileIcon(cuisine){ return CUISINE_TILE_ICON[cuisine] || 'ph-bowl-food'; }
-  // 목록 타일에 쓸 대표 메뉴 사진 하나를 고른다. 사장님 추천(isRecommend) 메뉴에 사진이 있으면
-  // 그걸 우선하고, 없으면 사진이 있는 첫 메뉴를 쓴다. 사진이 하나도 없으면(수동 입력한 메뉴 등)
-  // null을 돌려줘서 호출부가 기존 색블록 타일로 폴백하게 한다.
-  function pickMenuPhoto(r){
+  // 목록 타일에 쓸 사진 하나를 고른다. 1순위는 개별 메뉴 항목에 딸려온 사진(사장님 추천
+  // 메뉴 우선) — 실측 결과 이 필드가 있는 식당은 소수(AI메이트 카드가 붙은 일부 항목뿐)라서,
+  // 2순위로 식당 전체의 대표 사진(menuPhotoUrl — 프록시가 panel3의 "메뉴" 카테고리 블로그
+  // 사진에서 고른 것)까지 본다. 이마저 없으면(수동 입력 메뉴만 있는 식당 등) null을 돌려줘서
+  // 호출부가 기존 색블록 타일로 폴백하게 한다.
+  function pickTilePhoto(r){
     var withPhoto = (r.menuItems || []).filter(function(m){ return m.photoUrl; });
-    if(!withPhoto.length) return null;
-    return withPhoto.filter(function(m){ return m.isRecommend; })[0] || withPhoto[0];
+    var picked = withPhoto.filter(function(m){ return m.isRecommend; })[0] || withPhoto[0];
+    if(picked) return { url: picked.photoUrl, caption: picked.name };
+    if(r.menuPhotoUrl) return { url: r.menuPhotoUrl, caption: r.cuisine || '' };
+    return null;
   }
 
   // 카테고리명/상호명 키워드 → 태그·추천메뉴 자동 추정 규칙 (선매칭 우선 — 배열에서 먼저 나온
@@ -765,7 +793,12 @@
     sharedOverrides: {},
     // 목록(주변 식당 목록 · 정보 편집) 전용 카테고리 필터. 상단 추천 조건의 "종류" 칩과는
     // 별개 상태 — 이 목록을 구경/훑어보는 용도라 추천 로직에는 영향을 주지 않는다.
-    listCategoryFilter: 'all'
+    listCategoryFilter: 'all',
+    // 메뉴 검색(상호명/메뉴명으로 특정 음식을 파는 식당 찾기). 비어있으면 검색 모드가 아니고
+    // listCategoryFilter 기준 렌더링으로 동작한다. 종류/형태/목록 카테고리 필터와 달리 검색은
+    // 그 필터들을 무시하고 반경 내 전체 식당에서 찾는다(사용자 확정, 2026-09-22) — "알밥 파는 곳"
+    // 처럼 특정 메뉴를 찾을 때 활성화된 필터 때문에 정작 찾는 가게가 숨어버리면 안 되기 때문.
+    menuSearchQuery: ''
   };
 
   // ============ utils ============
@@ -1048,6 +1081,10 @@
       // 올린 적 있으면 세워두고, 재검색 때마다 오늘 요일 칸이 채워져 있는지 계속 확인한다.
       cafeteriaWeeklyEnabled: !!pickField('cafeteriaWeeklyEnabled'),
       cafeteriaMenuImage: raw.cafeteriaMenuImage || null,
+      // 카카오 panel3의 "메뉴" 카테고리 블로그 사진(또는 그마저 없으면 매장 전체 사진 첫 장)에서
+      // 뽑은 대표 사진. 개별 메뉴 항목에 사진이 없는 대다수 식당도 목록 타일에 색블록 대신 실제
+      // 사진을 보여주기 위한 폴백이라, cafeteriaMenuImage처럼 편집 대상이 아닌 자동조회 값이다.
+      menuPhotoUrl: raw.menuPhotoUrl || null,
       edited: !!pickField('edited')
     };
   }
@@ -1248,12 +1285,13 @@
     var all = storageGet('menuCache', {});
     var entry = all[placeId];
     if(!entry || (Date.now() - entry.ts) > CONFIG.MENU_CACHE_TTL_MS) return undefined;
-    // 식당 단위→메뉴 단위 리팩터 이전엔 이 캐시가 {signatureMenu, otherMenu} 객체를 저장했다.
-    // 그 시절 캐시가 아직 만료 안 된 채 남아있으면(TTL 24시간) 지금 코드가 기대하는 메뉴
-    // 배열이 아니라서, 그걸 그대로 쓰면 조용히 폴백(추정치)으로 빠져버리는 문제가 있었다
+    // 예전 캐시 형식(메뉴 배열을 그대로 저장하던 v2 이전, 그보다 더 옛날엔 {signatureMenu,
+    // otherMenu} 객체)이 TTL(24시간) 안에 아직 남아있으면 지금 코드가 기대하는 {items, photoUrl}
+    // 모양이 아니라서, 그걸 그대로 쓰면 조용히 폴백(추정치)으로 빠져버리는 문제가 있었다
     // (실사용에서 발견 — "정보 편집 초기화"로는 해결이 안 되는 별도 저장소라 더 헷갈렸음).
-    // 배열이 아닌 옛 형식이면 캐시 미스로 취급해 새로 조회하게 한다.
-    if(entry.data !== null && !Array.isArray(entry.data)) return undefined;
+    // TAG_RULES_VERSION을 올려 캐시 네임스페이스 자체를 분리해뒀지만, 혹시 모를 옛 형식은
+    // 여기서도 한 번 더 걸러서 캐시 미스로 취급해 새로 조회하게 한다.
+    if(entry.data !== null && !(entry.data && !Array.isArray(entry.data) && (entry.data.items === null || Array.isArray(entry.data.items)))) return undefined;
     return entry.data;
   }
   function menuCacheSet(placeId, data){
@@ -1459,15 +1497,19 @@
     if(!CONFIG.MENU_PROXY_URL) return Promise.resolve(null);
     var cacheKey = cacheNs + ':' + placeId;
     var cached = menuCacheGet(cacheKey);
-    if(cached !== undefined) return Promise.resolve(cached ? { items: cached, source: source } : null);
+    if(cached !== undefined) return Promise.resolve(cached ? { items: cached.items, photoUrl: cached.photoUrl || null, source: source } : null);
     var url = CONFIG.MENU_PROXY_URL + (CONFIG.MENU_PROXY_URL.indexOf('?')===-1?'?':'&') + proxyParam + '=' + encodeURIComponent(placeId);
     return fetch(url).then(function(resp){
       if(!resp.ok) throw new Error('menu proxy status ' + resp.status);
       return resp.json();
     }).then(function(data){
       var menuItems = toMenuItems(data && data.items);
-      menuCacheSet(cacheKey, menuItems); // null(메뉴 없음)도 캐싱해서 매번 재호출하지 않음
-      return menuItems ? { items: menuItems, source: source } : null;
+      // representativePhotoUrl은 개별 메뉴가 하나도 없어도(예: 메뉴판을 아직 안 올린 식당)
+      // 식당 사진은 있을 수 있어서, menuItems 유무와 별개로 캐싱/전달한다.
+      var photoUrl = (data && data.representativePhotoUrl) || null;
+      var payload = (menuItems || photoUrl) ? { items: menuItems, photoUrl: photoUrl } : null;
+      menuCacheSet(cacheKey, payload); // null(메뉴·사진 둘 다 없음)도 캐싱해서 매번 재호출하지 않음
+      return payload ? { items: payload.items, photoUrl: payload.photoUrl, source: source } : null;
     }).catch(function(err){
       console.warn('[lunch-recommender] 메뉴 보강 실패 (' + cacheNs + '=' + placeId + '):', err && err.message);
       return null;
@@ -1523,6 +1565,7 @@
         if(res){
           item.menuItems = res.items;
           item.menuSource = res.source;
+          item.menuPhotoUrl = res.photoUrl || null;
         }
         if(openHours !== undefined){
           item.openHours = openHours;
@@ -1676,20 +1719,22 @@
   }
   // 반경은 나머지 조건(형태/맛/종류)과 달리 결과를 필터링하는 게 아니라 카카오 재검색 범위
   // 자체를 바꾸므로, 멀티셀렉트 칩이 아니라 단일 선택이며 클릭 즉시 재검색(init)까지 트리거한다.
+  // 반경 칩 클릭과 "메뉴 검색 결과 0건일 때 반경 넓히기" 버튼이 공유하는 반경 변경 로직.
+  function setRadiusM(m){
+    if(state.radiusM === m) return;
+    state.radiusM = m;
+    storageSet('radiusM', m);
+    updatePageSub();
+    renderRadiusChips();
+    init();
+  }
   function renderRadiusChips(){
     var c = $('chips-radius');
     c.innerHTML = '';
     RADIUS_OPTIONS.forEach(function(opt){
       var chip = el('button', 'chip' + (state.radiusM === opt ? ' active' : ''), opt + 'm');
       chip.type = 'button';
-      chip.addEventListener('click', function(){
-        if(state.radiusM === opt) return;
-        state.radiusM = opt;
-        storageSet('radiusM', opt);
-        updatePageSub();
-        renderRadiusChips();
-        init();
-      });
+      chip.addEventListener('click', function(){ setRadiusM(opt); });
       c.appendChild(chip);
     });
   }
@@ -1761,6 +1806,7 @@
     $('rerollBtn').disabled = loading;
     $('skipRestaurantBtn').disabled = loading;
     $('researchBtn').disabled = loading;
+    $('menuSearchInput').disabled = loading;
     Array.prototype.forEach.call($('chips-radius').querySelectorAll('button'), function(b){ b.disabled = loading; });
     if(loading){
       help.hidden = false;
@@ -1837,6 +1883,18 @@
     onRecommend();
   }
 
+  // 메뉴 검색: 종류/형태/목록 카테고리 필터를 무시하고 상호명 또는 메뉴명(menuItems[].name)에
+  // 검색어가 포함된 식당을 찾는다. 메뉴를 실시간으로 못 가져와 keyword 추정 폴백 메뉴명만 있는
+  // 식당은 그 추정치가 검색어와 우연히 겹치지 않는 한 안 걸리는 게 정상 동작이다(TAG_RULES에
+  // 없는 구체적인 메뉴명일수록 실메뉴를 확보한 식당만 남는다).
+  function menuSearchMatches(query){
+    var q = query.trim().toLowerCase();
+    if(!q) return state.restaurants;
+    return state.restaurants.filter(function(r){
+      if((r.name||'').toLowerCase().indexOf(q) !== -1) return true;
+      return (r.menuItems||[]).some(function(m){ return (m.name||'').toLowerCase().indexOf(q) !== -1; });
+    });
+  }
   function renderList(){
     var body = $('listBody');
     body.innerHTML = '';
@@ -1844,10 +1902,27 @@
       body.appendChild(el('div','empty-state','아직 불러온 식당이 없어요.'));
       return;
     }
-    var byCategory = state.listCategoryFilter === 'all' ? state.restaurants
-      : state.restaurants.filter(function(r){ return r.cuisine === state.listCategoryFilter; });
+    var query = state.menuSearchQuery.trim();
+    var searching = query !== '';
+    var listCategoryChips = $('listCategoryChips'), listCategoryHelp = $('listCategoryHelp'), searchNote = $('menuSearchNote');
+    if(listCategoryChips) listCategoryChips.hidden = searching;
+    if(listCategoryHelp) listCategoryHelp.hidden = searching;
+    if(searchNote) searchNote.hidden = !searching;
+    var byCategory = searching ? menuSearchMatches(query)
+      : (state.listCategoryFilter === 'all' ? state.restaurants
+        : state.restaurants.filter(function(r){ return r.cuisine === state.listCategoryFilter; }));
     if(byCategory.length === 0){
-      body.appendChild(el('div','empty-state','\'' + state.listCategoryFilter + '\' 카테고리에 맞는 식당이 없어요.'));
+      if(searching){
+        body.appendChild(el('div','empty-state','\'' + escapeHtml(query) + '\' 메뉴를 파는 식당을 반경 ' + state.radiusM + 'm 안에서 못 찾았어요.'));
+        if(state.radiusM < 500){
+          var widenBtn = el('button','btn btn-outline menu-search-widen','500m까지 넓혀서 다시 찾기');
+          widenBtn.type = 'button';
+          widenBtn.addEventListener('click', function(){ setRadiusM(500); });
+          body.appendChild(widenBtn);
+        }
+      } else {
+        body.appendChild(el('div','empty-state','\'' + state.listCategoryFilter + '\' 카테고리에 맞는 식당이 없어요.'));
+      }
       return;
     }
     var sorted = byCategory.slice().sort(function(a,b){ return (a.distanceM||0)-(b.distanceM||0); });
@@ -1882,23 +1957,23 @@
   function buildRow(r){
     var row = el('div', 'r-row' + (r.isIncluded ? '' : ' excluded'));
 
-    // 타일 상단 이미지 — 구내식당 "오늘의 메뉴" 사진이 최우선, 그다음은 일반 메뉴 자동조회에
-    // 이미 딸려오던(그러나 예전엔 버려지던) 메뉴 사진(pickMenuPhoto), 둘 다 없으면 종류별
-    // 컬러 블록 + 아이콘(A안)으로 채운다. 사진은 클릭하면 라이트박스로 크게 볼 수 있다.
+    // 타일 상단 이미지 — 구내식당 "오늘의 메뉴" 사진이 최우선, 그다음은 pickTilePhoto가 고른
+    // 사진(개별 메뉴 사진 → 없으면 식당 대표 사진), 둘 다 없으면 종류별 컬러 블록 + 아이콘(A안)
+    // 으로 채운다. 사진은 클릭하면 라이트박스로 크게 볼 수 있다.
     var tileTop = el('div','r-tile-top');
-    var menuPhoto = r.cafeteriaMenuImage ? null : pickMenuPhoto(r);
+    var tilePhoto = r.cafeteriaMenuImage ? null : pickTilePhoto(r);
     if(r.cafeteriaMenuImage){
       tileTop.classList.add('has-photo');
       tileTop.style.backgroundImage = "url('" + r.cafeteriaMenuImage.imageUrl.replace(/'/g, '%27') + "')";
       tileTop.appendChild(el('div','r-tile-cui','오늘의 메뉴 사진'));
       tileTop.style.cursor = 'zoom-in';
       tileTop.addEventListener('click', function(){ openPhotoLightbox(r.cafeteriaMenuImage.imageUrl); });
-    } else if(menuPhoto){
+    } else if(tilePhoto){
       tileTop.classList.add('has-photo');
-      tileTop.style.backgroundImage = "url('" + menuPhoto.photoUrl.replace(/'/g, '%27') + "')";
-      tileTop.appendChild(el('div','r-tile-cui', escapeHtml(menuPhoto.name)));
+      tileTop.style.backgroundImage = "url('" + tilePhoto.url.replace(/'/g, '%27') + "')";
+      tileTop.appendChild(el('div','r-tile-cui', escapeHtml(tilePhoto.caption)));
       tileTop.style.cursor = 'zoom-in';
-      tileTop.addEventListener('click', function(){ openPhotoLightbox(menuPhoto.photoUrl); });
+      tileTop.addEventListener('click', function(){ openPhotoLightbox(tilePhoto.url); });
     } else {
       tileTop.classList.add(cuisineTileColorClass(r.cuisine));
       tileTop.appendChild(el('i','ph-fill ' + cuisineTileIcon(r.cuisine)));
@@ -2310,6 +2385,7 @@
     $('rerollBtn').disabled = false;
     $('skipRestaurantBtn').disabled = false;
     $('researchBtn').disabled = false;
+    $('menuSearchInput').disabled = false;
     updatePageSub();
     renderChips();
     renderListCategoryFilter();
@@ -3034,6 +3110,22 @@
     });
     $('researchBtn').addEventListener('click', init);
     $('retryLiveBtn').addEventListener('click', init);
+    var menuSearchDebounceTimer = null;
+    $('menuSearchInput').addEventListener('input', function(){
+      var value = this.value;
+      $('menuSearchClear').hidden = !value.trim();
+      clearTimeout(menuSearchDebounceTimer);
+      menuSearchDebounceTimer = setTimeout(function(){
+        state.menuSearchQuery = value;
+        renderList();
+      }, 200);
+    });
+    $('menuSearchClear').addEventListener('click', function(){
+      $('menuSearchInput').value = '';
+      $('menuSearchClear').hidden = true;
+      state.menuSearchQuery = '';
+      renderList();
+    });
     init();
 
     $('teamInviteBtn').addEventListener('click', onTeamInviteClick);

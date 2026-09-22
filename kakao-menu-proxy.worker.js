@@ -203,6 +203,16 @@ export default {
     }
 
     const rawItems = data?.menu?.menus?.items || [];
+    // 개별 메뉴 항목의 photo_url(rawItems[].photo_url)은 실측 결과 "AI메이트" 카드가 붙은
+    // 일부 항목에만 있고 대부분 비어있다(2026-09-22, "돈토"/placeId=11598876으로 직접 확인 —
+    // 항목 4개 전부 photo_url 없음). 반면 panel3는 블로그 리뷰 사진을 카테고리별로 이미 분류해
+    // 두는데, menu.menus.photos가 그중 "메뉴"로 분류된 사진들이라(개수가 photos.counts.menu와
+    // 정확히 일치함을 확인) 식당 자체의 대표 메뉴/음식 사진으로 쓰기에 photos.photos(구분 없는
+    // 전체 방문자 사진, 간판/내부 사진도 섞여있어 음식과 무관할 수 있음)보다 훨씬 신뢰할 만하다.
+    // "메뉴" 사진이 아예 없는 식당만 photos.photos 첫 장으로 최후 폴백한다.
+    const menuPhotos = data?.menu?.menus?.photos || [];
+    const generalPhotos = data?.photos?.photos || [];
+    const representativePhotoUrl = menuPhotos[0]?.url || generalPhotos[0]?.url || null;
     const result = {
       placeId,
       menuType: data?.menu?.menus?.menu_type || null,
@@ -215,6 +225,7 @@ export default {
         description: it.ai_mate_desc || null,
         photoUrl: it.photo_url || null,
       })),
+      representativePhotoUrl,
       openHours: parseOpenHours(data?.open_hours),
     };
 
