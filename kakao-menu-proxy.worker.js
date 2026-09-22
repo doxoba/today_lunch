@@ -1034,7 +1034,9 @@ async function handleGetCafeteriaWeeklyStatus(url, env) {
 // 캐시 키에 파싱 스키마 버전을 넣어둔다 — 안 넣으면 네이버 페이지 구조가 바뀌어 파싱
 // 로직을 고쳐도, 예전 로직으로 캐싱된 응답(최대 24시간)이 새 코드에 도달하기도 전에
 // 그대로 반환되어 배포해도 안 고쳐진 것처럼 보이는 문제가 생긴다.
-const NAVER_MENU_SCHEMA_VERSION = 'v2';
+// v3: 대표 사진(representativePhotoUrl) 필드 추가 (2026-09-22, 텐진라멘 등에서 naverPlaceId가
+// 등록된 식당은 대표사진이 항상 없던 문제 수정 — 이 라우트에 그 필드가 아예 없었던 게 원인).
+const NAVER_MENU_SCHEMA_VERSION = 'v3';
 async function handleNaverMenu(naverPlaceId) {
   if (!/^\d+$/.test(naverPlaceId)) {
     return json({ error: 'naverPlaceId는 숫자만 가능합니다.' }, 400);
@@ -1095,6 +1097,17 @@ async function handleNaverMenu(naverPlaceId) {
 
   const menuItems = orderedIds.map((id) => itemsById[id]).filter(Boolean);
 
+  // 대표 사진: 'PlaceDetailTopPhotoItem'이 상단 사진탭 항목이다(2026-09-22, 텐진라멘/1503592037로
+  // 직접 확인 — naverPlaceId가 등록된 식당은 이 라우트가 우선돼 카카오 대표사진 폴백을 아예 안 타서,
+  // 여기에도 같은 기능이 없으면 실제로 사진이 있는 식당도 항상 색블록으로만 보이는 문제가 있었음).
+  // mediaSource가 'business'(사장님이 직접 등록)면 리뷰 사진보다 신뢰도가 높아 최우선하고, 없으면
+  // 방문자 리뷰 사진(aiView/placeReview 등) 중 첫 장으로 폴백한다. video(클립)는 사진이 아니므로 제외.
+  const topPhotos = values.filter((v) => v && v.__typename === 'PlaceDetailTopPhotoItem' && v.mediaFormat === 'image');
+  const businessPhoto = topPhotos.find((v) => v.mediaSource === 'business');
+  const representativePhotoUrl = (businessPhoto || topPhotos[0])?.originalUrl
+    || (businessPhoto || topPhotos[0])?.thumbnailUrl
+    || null;
+
   const result = {
     placeId: naverPlaceId,
     items: menuItems.map((it) => {
@@ -1110,6 +1123,7 @@ async function handleNaverMenu(naverPlaceId) {
         photoUrl: it.thumbnailUrl || (it.images && it.images[0] && it.images[0].url) || null,
       };
     }),
+    representativePhotoUrl,
   };
 
   const response = json(result, 200, {
