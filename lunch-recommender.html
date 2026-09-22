@@ -629,6 +629,14 @@
     return CUISINE_TILE_COLORS[(idx < 0 ? 0 : idx) % CUISINE_TILE_COLORS.length];
   }
   function cuisineTileIcon(cuisine){ return CUISINE_TILE_ICON[cuisine] || 'ph-bowl-food'; }
+  // 목록 타일에 쓸 대표 메뉴 사진 하나를 고른다. 사장님 추천(isRecommend) 메뉴에 사진이 있으면
+  // 그걸 우선하고, 없으면 사진이 있는 첫 메뉴를 쓴다. 사진이 하나도 없으면(수동 입력한 메뉴 등)
+  // null을 돌려줘서 호출부가 기존 색블록 타일로 폴백하게 한다.
+  function pickMenuPhoto(r){
+    var withPhoto = (r.menuItems || []).filter(function(m){ return m.photoUrl; });
+    if(!withPhoto.length) return null;
+    return withPhoto.filter(function(m){ return m.isRecommend; })[0] || withPhoto[0];
+  }
 
   // 카테고리명/상호명 키워드 → 태그·추천메뉴 자동 추정 규칙 (선매칭 우선 — 배열에서 먼저 나온
   // 규칙이 이긴다. 예: "카레돈까스"는 "커리"보다 앞에 있는 "돈까스" 규칙에 먼저 걸려야 한다)
@@ -749,7 +757,10 @@
     searchIncomplete: false,
     map: null,
     highlightMarker: null,
-    highlightInfoWindow: null,
+    // 지도 위에서 현재 열려있는 말풍선(일반 핀/하이라이트 핀 공통) 하나만 추적한다. 다른 핀을
+    // 누르거나 지도 바탕을 누르면 이걸 먼저 닫아서, 이전 말풍선이 안 닫힌 채 여러 개 겹치는
+    // 문제를 막는다.
+    openInfoWindow: null,
     // 자동/포함/제외 공유 상태(Cloudflare KV). init()에서 채워지며, { [placeId]: {manualOverride, updatedAt} }.
     sharedOverrides: {},
     // 목록(주변 식당 목록 · 정보 편집) 전용 카테고리 필터. 상단 추천 조건의 "종류" 칩과는
@@ -1435,7 +1446,11 @@
         name: it.name,
         price: (isFinite(price) && price > 0) ? price : null,
         isRecommend: !!it.isRecommend,
-        type: tags.type
+        type: tags.type,
+        // 카카오/네이버 프록시가 메뉴별 실제 사진(photo_url/thumbnailUrl)을 이미 내려주는데,
+        // 예전엔 여기서 버려서 목록 타일에 색블록만 뜨는 식당이 대부분이었다. 구내식당
+        // "오늘의 메뉴 사진"처럼 이 사진을 타일에 그대로 쓴다(buildRow의 pickMenuPhoto 참고).
+        photoUrl: it.photoUrl || null
       };
     });
   }
@@ -1462,7 +1477,9 @@
   // 수정을 할 때마다 이 버전을 올리면, 예전 판정으로 이미 캐싱된 메뉴가 새 코드에서도 그대로
   // 재사용되는 일 없이 자동으로 무효화되어 다시 조회·재태깅된다(실사용 중 캐시에 이미 잘못
   // 태깅된 메뉴가 박혀있던 문제가 있었음).
-  var TAG_RULES_VERSION = 'v2';
+  // v3: 메뉴 항목에 photoUrl을 추가로 캐싱하기 시작해서, 이 필드가 없는 v2 캐시가 남아있으면
+  // 목록 타일이 사진 대신 색블록으로 계속 보이는 문제가 있었다 — 버전을 올려 즉시 재조회시킨다.
+  var TAG_RULES_VERSION = 'v3';
   function fetchMenuFor(placeId){ return fetchMenuFrom('placeId', placeId, 'kakao-'+TAG_RULES_VERSION, 'kakao-live'); }
   function fetchNaverMenuFor(placeId){ return fetchMenuFrom('naverPlaceId', placeId, 'naver-'+TAG_RULES_VERSION, 'naver-live'); }
   // 네이버 지도 URL에서 place id를 뽑아낸다. 검색결과를 거쳐 들어온 리다이렉트 URL
@@ -1528,29 +1545,55 @@
     var map = new kakao.maps.Map(container, { center:center, level:4 });
     state.map = map;
     state.highlightMarker = null; // 지도를 새로 만들었으니 이전 하이라이트 참조는 무효
-    state.highlightInfoWindow = null;
+    state.openInfoWindow = null;
     new kakao.maps.Marker({ position:center, map:map });
     new kakao.maps.Circle({
       center:center, radius:state.radiusM, strokeWeight:2, strokeColor:'#ff6b35', strokeOpacity:.8,
       fillColor:'#ff6b35', fillOpacity:.12, map:map
     });
+    kakao.maps.event.addListener(map, 'click', closeOpenInfoWindow);
     state.restaurants.forEach(function(r){
       if(r.lat == null || r.lng == null) return;
       var pos = new kakao.maps.LatLng(r.lat, r.lng);
-      var marker = new kakao.maps.Marker({ position:pos, map:map, image:getRegularMarkerImage(), opacity: r.isIncluded ? 1 : 0.35 });
-      var iw = new kakao.maps.InfoWindow({ content:'<div style="padding:4px 8px;font-size:12px;white-space:nowrap;">'+r.name+'</div>' });
-      kakao.maps.event.addListener(marker, 'click', function(){ iw.open(map, marker); });
+      // 반경/철길 판정(includedByGeometry)만으로 투명도를 정한다 — 영업시간 제외나 수동 포함
+      // 오버라이드는 추천 후보 여부(isIncluded)에는 영향을 주지만, "철길 건너편이라 반투명"이라는
+      // 지도 위 시각적 규칙과는 별개라 섞으면 오히려 혼선이 생긴다.
+      var marker = new kakao.maps.Marker({ position:pos, map:map, image:getRegularMarkerImage(), opacity: r.includedByGeometry ? 1 : 0.35 });
+      var iw = new kakao.maps.InfoWindow({ content:infoWindowContent(r, false) });
+      kakao.maps.event.addListener(marker, 'click', function(){
+        closeOpenInfoWindow();
+        iw.open(map, marker);
+        state.openInfoWindow = iw;
+      });
     });
   }
 
-  // 일반 매장 핀: 흰 배경 + 틸 테두리(아웃라인 스타일). 추천/선택된 매장은 getHighlightMarkerImage()로 별도 강조.
+  // 말풍선(InfoWindow) 안에 상호명과 함께 넣는 "상점 상세보기" 링크는 카드의 "지도에서 보기"와
+  // 동일하게 placeUrl로 새 탭을 연다. r.name/placeUrl은 카카오/네이버에서 온 신뢰할 수 없는
+  // 문자열이라 escapeHtml을 거친다.
+  function infoWindowContent(r, strong){
+    var html = '<div style="padding:6px 10px;font-size:12px;' + (strong ? 'font-weight:700;' : '') + 'white-space:nowrap;">' + escapeHtml(r.name);
+    if(r.placeUrl){
+      html += '<br><a href="' + escapeHtml(r.placeUrl) + '" target="_blank" rel="noopener" style="display:inline-block;margin-top:4px;font-size:11px;font-weight:700;color:#ff2d78;">상점 상세보기</a>';
+    }
+    html += '</div>';
+    return html;
+  }
+
+  // 현재 지도 위에 열려있는 말풍선을 닫는다. 다른 핀을 누르거나 지도 바탕을 누를 때 호출해서
+  // 이전 말풍선이 안 닫힌 채 여러 개 남아있는 문제를 막는다.
+  function closeOpenInfoWindow(){
+    if(state.openInfoWindow){ state.openInfoWindow.close(); state.openInfoWindow = null; }
+  }
+
+  // 일반 매장 핀: 흰 배경 + 핫핑크 테두리(아웃라인 스타일). 추천/선택된 매장은 getHighlightMarkerImage()로 별도 강조.
   var regularMarkerImage = null;
   function getRegularMarkerImage(){
     if(regularMarkerImage) return regularMarkerImage;
-    var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="26" height="34" viewBox="0 0 36 46">' +
-      '<path d="M18 0C8 0 0 8 0 18c0 12.5 18 28 18 28s18-15.5 18-28C36 8 28 0 18 0z" fill="#ffffff" stroke="#111411" stroke-width="3"/></svg>';
+    var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="16" viewBox="0 0 36 46">' +
+      '<path d="M18 0C8 0 0 8 0 18c0 12.5 18 28 18 28s18-15.5 18-28C36 8 28 0 18 0z" fill="#ffffff" stroke="#ff2d78" stroke-width="3"/></svg>';
     var uri = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
-    regularMarkerImage = new kakao.maps.MarkerImage(uri, new kakao.maps.Size(26,34), { offset: new kakao.maps.Point(13,34) });
+    regularMarkerImage = new kakao.maps.MarkerImage(uri, new kakao.maps.Size(12,16), { offset: new kakao.maps.Point(6,16) });
     return regularMarkerImage;
   }
 
@@ -1558,25 +1601,22 @@
   var highlightMarkerImage = null;
   function getHighlightMarkerImage(){
     if(highlightMarkerImage) return highlightMarkerImage;
-    var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="36" height="46" viewBox="0 0 36 46">' +
+    var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="21" viewBox="0 0 36 46">' +
       '<path d="M18 0C8 0 0 8 0 18c0 12.5 18 28 18 28s18-15.5 18-28C36 8 28 0 18 0z" fill="#ff2d78" stroke="#ffffff" stroke-width="3"/></svg>';
     var uri = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
-    highlightMarkerImage = new kakao.maps.MarkerImage(uri, new kakao.maps.Size(36,46), { offset: new kakao.maps.Point(18,46) });
+    highlightMarkerImage = new kakao.maps.MarkerImage(uri, new kakao.maps.Size(16,21), { offset: new kakao.maps.Point(8,21) });
     return highlightMarkerImage;
   }
   function highlightResult(r){
     if(state.mode !== 'live' || !state.map || !r || r.lat == null || r.lng == null) return;
     if(state.highlightMarker){ state.highlightMarker.setMap(null); }
-    if(state.highlightInfoWindow){ state.highlightInfoWindow.close(); }
+    closeOpenInfoWindow();
     var pos = new kakao.maps.LatLng(r.lat, r.lng);
     var marker = new kakao.maps.Marker({ position:pos, map:state.map, image:getHighlightMarkerImage(), zIndex:10 });
-    var iw = new kakao.maps.InfoWindow({
-      content:'<div style="padding:6px 10px;font-size:12px;font-weight:700;white-space:nowrap;">'+r.name+'</div>',
-      zIndex:10
-    });
+    var iw = new kakao.maps.InfoWindow({ content:infoWindowContent(r, true), zIndex:10 });
     iw.open(state.map, marker);
     state.highlightMarker = marker;
-    state.highlightInfoWindow = iw;
+    state.openInfoWindow = iw;
     state.map.panTo(pos);
   }
 
@@ -1842,15 +1882,23 @@
   function buildRow(r){
     var row = el('div', 'r-row' + (r.isIncluded ? '' : ' excluded'));
 
-    // 타일 상단 이미지 — 구내식당 "오늘의 메뉴" 사진이 있으면 그걸 쓰고, 없으면 종류별
+    // 타일 상단 이미지 — 구내식당 "오늘의 메뉴" 사진이 최우선, 그다음은 일반 메뉴 자동조회에
+    // 이미 딸려오던(그러나 예전엔 버려지던) 메뉴 사진(pickMenuPhoto), 둘 다 없으면 종류별
     // 컬러 블록 + 아이콘(A안)으로 채운다. 사진은 클릭하면 라이트박스로 크게 볼 수 있다.
     var tileTop = el('div','r-tile-top');
+    var menuPhoto = r.cafeteriaMenuImage ? null : pickMenuPhoto(r);
     if(r.cafeteriaMenuImage){
       tileTop.classList.add('has-photo');
       tileTop.style.backgroundImage = "url('" + r.cafeteriaMenuImage.imageUrl.replace(/'/g, '%27') + "')";
       tileTop.appendChild(el('div','r-tile-cui','오늘의 메뉴 사진'));
       tileTop.style.cursor = 'zoom-in';
       tileTop.addEventListener('click', function(){ openPhotoLightbox(r.cafeteriaMenuImage.imageUrl); });
+    } else if(menuPhoto){
+      tileTop.classList.add('has-photo');
+      tileTop.style.backgroundImage = "url('" + menuPhoto.photoUrl.replace(/'/g, '%27') + "')";
+      tileTop.appendChild(el('div','r-tile-cui', escapeHtml(menuPhoto.name)));
+      tileTop.style.cursor = 'zoom-in';
+      tileTop.addEventListener('click', function(){ openPhotoLightbox(menuPhoto.photoUrl); });
     } else {
       tileTop.classList.add(cuisineTileColorClass(r.cuisine));
       tileTop.appendChild(el('i','ph-fill ' + cuisineTileIcon(r.cuisine)));
@@ -1932,6 +1980,12 @@
       }
     });
     actions.appendChild(reviewToggle);
+
+    if(r.placeUrl){
+      var mapLink = el('a','edit-toggle','지도에서 보기');
+      mapLink.href = r.placeUrl; mapLink.target = '_blank'; mapLink.rel = 'noopener';
+      actions.appendChild(mapLink);
+    }
 
     body.appendChild(actions);
     body.appendChild(form);

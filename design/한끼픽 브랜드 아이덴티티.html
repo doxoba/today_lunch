@@ -1,0 +1,1033 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=1440" />
+<title>한끼픽 · Brand Identity Exploration</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Pretendard:wght@300;400;500;600;700;800;900&family=IBM+Plex+Mono:wght@300;400;500;600&family=Gowun+Batang:wght@400;700&family=Song+Myung&family=Do+Hyeon&family=Black+Han+Sans&family=Nanum+Myeongjo:wght@400;700;800&family=Space+Grotesk:wght@300;400;500;600;700&family=DM+Serif+Display&family=Jua&family=Gaegu:wght@400;700&display=swap" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" rel="stylesheet">
+<style>
+  :root{
+    --ink:#0f100e;
+    --paper:#faf8f3;
+    --line:rgba(15,16,14,.12);
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-font-smoothing:antialiased}
+  html,body{background:#e9e6de;color:var(--ink);font-family:'Pretendard',sans-serif;}
+  body{padding:0 0 120px 0;}
+  a{color:inherit;}
+
+  /* ---------- top masthead ---------- */
+  .masthead{
+    max-width:1320px;margin:0 auto;padding:36px 40px 24px;
+    display:flex;justify-content:space-between;align-items:flex-end;gap:40px;
+    border-bottom:1px solid rgba(15,16,14,.35);
+  }
+  .masthead h1{
+    font-family:'Nanum Myeongjo',serif;font-weight:800;
+    font-size:56px;letter-spacing:-.02em;line-height:.95;
+  }
+  .masthead h1 em{font-style:italic;font-weight:400;color:#4b6b3a;}
+  .masthead .meta{
+    font-family:'IBM Plex Mono',monospace;font-size:11px;
+    text-align:right;letter-spacing:.04em;text-transform:uppercase;
+    color:rgba(15,16,14,.6);line-height:1.7;
+  }
+  .kicker{
+    max-width:1320px;margin:0 auto;padding:20px 40px 0;
+    display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:32px;
+    font-family:'IBM Plex Mono',monospace;font-size:11px;
+    text-transform:uppercase;letter-spacing:.06em;color:rgba(15,16,14,.65);
+  }
+  .kicker b{display:block;color:var(--ink);font-weight:600;margin-bottom:6px;letter-spacing:.08em;}
+
+  /* ---------- direction nav ---------- */
+  .nav{
+    position:sticky;top:0;z-index:50;
+    background:#e9e6de;border-bottom:1px solid rgba(15,16,14,.2);
+    margin-top:36px;
+  }
+  .nav-inner{
+    max-width:1320px;margin:0 auto;padding:14px 40px;
+    display:flex;gap:6px;justify-content:space-between;align-items:center;
+  }
+  .nav .label{font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.08em;text-transform:uppercase;opacity:.55;}
+  .nav-links{display:flex;gap:6px;}
+  .nav a{
+    text-decoration:none;padding:8px 14px;border-radius:999px;
+    font-size:13px;font-weight:500;transition:all .2s;
+    border:1px solid transparent;
+  }
+  .nav a:hover{background:var(--ink);color:var(--paper);}
+  .nav a .num{font-family:'IBM Plex Mono',monospace;font-size:10px;opacity:.55;margin-right:6px;}
+  .nav a:hover .num{opacity:1;}
+
+  /* ---------- direction section shell ---------- */
+  .dir{
+    max-width:1320px;margin:80px auto 0;padding:0 40px;
+    scroll-margin-top:80px;
+  }
+  .dir-header{
+    display:grid;grid-template-columns:120px 1fr auto;gap:32px;align-items:end;
+    padding-bottom:24px;border-bottom:1px solid rgba(15,16,14,.35);
+  }
+  .dir-num{
+    font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.1em;
+    text-transform:uppercase;color:rgba(15,16,14,.5);
+    display:flex;flex-direction:column;gap:4px;
+  }
+  .dir-num .big{
+    font-family:'Nanum Myeongjo',serif;font-size:56px;color:var(--ink);
+    letter-spacing:0;line-height:1;font-weight:800;
+  }
+  .dir-title{font-family:'Pretendard',sans-serif;}
+  .dir-title .en{font-family:'Space Grotesk',sans-serif;font-size:13px;letter-spacing:.24em;text-transform:uppercase;opacity:.6;margin-bottom:8px;}
+  .dir-title h2{font-size:44px;font-weight:700;letter-spacing:-.02em;line-height:1;}
+  .dir-title .desc{margin-top:12px;font-size:15px;max-width:520px;line-height:1.55;opacity:.75;}
+  .dir-tags{
+    font-family:'IBM Plex Mono',monospace;font-size:11px;text-align:right;
+    letter-spacing:.06em;color:rgba(15,16,14,.55);line-height:1.8;
+  }
+
+  /* ---------- reusable panels ---------- */
+  .grid{display:grid;gap:16px;margin-top:16px;}
+  .panel{
+    background:var(--panel-bg,#fff);
+    color:var(--panel-fg,var(--ink));
+    border:1px solid var(--line);
+    border-radius:14px;overflow:hidden;position:relative;
+  }
+  .panel.flat{border-radius:0;}
+  .panel .tag{
+    position:absolute;top:14px;left:16px;
+    font-family:'IBM Plex Mono',monospace;font-size:10px;
+    letter-spacing:.1em;text-transform:uppercase;opacity:.55;
+  }
+  .panel .caption{
+    padding:14px 16px;font-family:'IBM Plex Mono',monospace;
+    font-size:10px;letter-spacing:.08em;text-transform:uppercase;
+    color:rgba(15,16,14,.55);
+    display:flex;justify-content:space-between;
+    border-top:1px dashed rgba(15,16,14,.12);
+  }
+
+  /* ---------- logo stage ---------- */
+  .logo-stage{
+    min-height:280px;display:flex;align-items:center;justify-content:center;
+    padding:56px 32px;
+  }
+  .logo-stage.tall{min-height:340px;}
+  .logo-mini{
+    min-height:140px;display:flex;align-items:center;justify-content:center;
+    padding:24px;
+  }
+
+  /* ---------- color chips ---------- */
+  .swatch{
+    padding:20px;display:flex;flex-direction:column;justify-content:space-between;
+    min-height:140px;border-radius:10px;
+    font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.04em;
+  }
+  .swatch .name{font-weight:500;text-transform:uppercase;}
+  .swatch .hex{opacity:.7;margin-top:2px;}
+  .swatch .role{font-size:10px;opacity:.55;text-transform:uppercase;letter-spacing:.1em;}
+
+  /* ---------- type spec ---------- */
+  .type-row{padding:24px 28px;border-top:1px dashed rgba(15,16,14,.12);}
+  .type-row:first-child{border-top:0;}
+  .type-row .meta{
+    font-family:'IBM Plex Mono',monospace;font-size:10px;text-transform:uppercase;
+    letter-spacing:.1em;opacity:.55;margin-bottom:10px;
+    display:flex;justify-content:space-between;
+  }
+
+  /* ---------- app-icon frame ---------- */
+  .app-icon{
+    width:132px;height:132px;border-radius:30px;
+    display:flex;align-items:center;justify-content:center;
+    box-shadow:0 20px 40px -20px rgba(0,0,0,.25);
+    position:relative;overflow:hidden;
+  }
+  .phone{
+    width:200px;height:400px;border-radius:34px;
+    padding:16px 14px;position:relative;overflow:hidden;
+    box-shadow:0 20px 40px -20px rgba(0,0,0,.35);
+    font-size:11px;
+  }
+  .phone .notch{width:60px;height:5px;background:rgba(0,0,0,.35);border-radius:4px;margin:0 auto 14px;}
+
+  /* ---------- footer note ---------- */
+  .footnote{
+    max-width:1320px;margin:120px auto 0;padding:40px;
+    border-top:1px solid rgba(15,16,14,.2);
+    font-family:'IBM Plex Mono',monospace;font-size:11px;
+    color:rgba(15,16,14,.55);text-transform:uppercase;letter-spacing:.08em;
+    display:flex;justify-content:space-between;
+  }
+
+  /* -------------------------------------------------- */
+  /* DIRECTION 1 · FRESH PICK (Premium Newtro)          */
+  /* -------------------------------------------------- */
+  #d1{--d1-deep:#1c3a24;--d1-grass:#5f8c3e;--d1-oat:#f0ebde;--d1-cream:#faf6ea;--d1-ink:#0f100e;}
+  #d1 .dir-num .big{color:var(--d1-deep);}
+  #d1 .grid-logo{grid-template-columns:1.6fr 1fr 1fr;}
+  #d1 .logo-primary{background:var(--d1-cream);}
+  #d1 .logo-mark{background:var(--d1-deep);color:var(--d1-oat);}
+  #d1 .logo-white{background:var(--d1-grass);color:var(--d1-cream);}
+  #d1 .wordmark{
+    font-family:'Nanum Myeongjo',serif;font-weight:800;
+    font-size:82px;letter-spacing:-.03em;color:var(--d1-deep);line-height:1;
+  }
+  #d1 .wordmark .dot{color:var(--d1-grass);}
+  #d1 .wordmark em{font-style:italic;font-weight:400;font-size:.5em;vertical-align:12px;letter-spacing:.05em;}
+  #d1 .grid-color{grid-template-columns:2fr 1fr 1fr 1fr 1fr;}
+  #d1 .grid-app{grid-template-columns:auto auto 1fr;align-items:stretch;}
+
+  /* -------------------------------------------------- */
+  /* DIRECTION 2 · 찍먹 (B급 팝 감성)                    */
+  /* -------------------------------------------------- */
+  #d2{--d2-lime:#c8ff2e;--d2-ink:#111411;--d2-hot:#ff4a1c;--d2-sky:#a8e3ff;--d2-paper:#fffef0;}
+  #d2 .dir-num .big{color:var(--d2-ink);}
+  #d2 .grid-logo{grid-template-columns:1.6fr 1fr 1fr;}
+  #d2 .logo-primary{background:var(--d2-lime);}
+  #d2 .logo-mark{background:var(--d2-ink);color:var(--d2-lime);}
+  #d2 .logo-white{background:var(--d2-hot);color:var(--d2-paper);}
+  #d2 .stamp-wordmark{
+    display:inline-flex;flex-direction:column;align-items:center;line-height:.9;
+    font-family:'Black Han Sans',sans-serif;color:var(--d2-ink);
+    transform:rotate(-3deg);
+  }
+  #d2 .stamp-wordmark .top{font-size:26px;letter-spacing:.05em;background:var(--d2-ink);color:var(--d2-lime);padding:4px 14px;border-radius:6px;margin-bottom:8px;font-family:'Do Hyeon',sans-serif;}
+  #d2 .stamp-wordmark .main{font-size:96px;letter-spacing:-.02em;}
+  #d2 .stamp-wordmark .main .p{color:var(--d2-hot);}
+  #d2 .bubble{
+    display:inline-block;padding:14px 22px 16px;background:var(--d2-ink);color:var(--d2-lime);
+    border-radius:22px;font-family:'Black Han Sans',sans-serif;font-size:44px;position:relative;line-height:1;
+  }
+  #d2 .bubble:after{
+    content:"";position:absolute;bottom:-10px;left:32px;
+    width:0;height:0;border-left:14px solid transparent;border-right:0;border-top:14px solid var(--d2-ink);
+  }
+  #d2 .grid-color{grid-template-columns:1.4fr 1fr 1fr 1fr;}
+  #d2 .grid-app{grid-template-columns:auto auto 1fr;align-items:stretch;}
+
+  /* -------------------------------------------------- */
+  /* DIRECTION 3 · Pick.001 (쿨 미니멀)                  */
+  /* -------------------------------------------------- */
+  #d3{--d3-matte:#2e3e2c;--d3-mint:#c9e4b7;--d3-fog:#eeece4;--d3-line:#0f100e;--d3-cursor:#5aff8a;}
+  #d3 .dir-num .big{color:var(--d3-matte);}
+  #d3 .grid-logo{grid-template-columns:1.6fr 1fr 1fr;}
+  #d3 .logo-primary{background:var(--d3-fog);}
+  #d3 .logo-mark{background:var(--d3-matte);color:var(--d3-mint);}
+  #d3 .logo-white{background:#0e120d;color:var(--d3-cursor);}
+  #d3 .mono-wordmark{
+    font-family:'IBM Plex Mono',monospace;font-weight:500;
+    font-size:56px;letter-spacing:-.02em;color:var(--d3-matte);
+    display:flex;align-items:center;gap:8px;
+  }
+  #d3 .mono-wordmark .brk{color:rgba(15,16,14,.35);}
+  #d3 .mono-wordmark .caret{
+    display:inline-block;width:12px;height:56px;background:var(--d3-matte);
+    animation:blink 1s steps(2) infinite;margin-left:4px;
+  }
+  @keyframes blink{50%{opacity:0;}}
+  #d3 .grid-color{grid-template-columns:1.4fr 1fr 1fr 1fr;}
+  #d3 .grid-app{grid-template-columns:auto auto 1fr;align-items:stretch;}
+  #d3 .mono-badge{
+    font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.06em;
+    padding:4px 8px;border:1px solid currentColor;border-radius:4px;
+  }
+
+  /* -------------------------------------------------- */
+  /* DIRECTION 4 · 한끼 (레트로 캐릭터)                  */
+  /* -------------------------------------------------- */
+  #d4{--d4-vgreen:#3b6b3a;--d4-brick:#c85d3a;--d4-cream:#f4ead3;--d4-mustard:#e8b23a;--d4-ink:#1e1a12;}
+  #d4 .dir-num .big{color:var(--d4-vgreen);}
+  #d4 .grid-logo{grid-template-columns:1.4fr 1fr 1fr;}
+  #d4 .logo-primary{background:var(--d4-cream);}
+  #d4 .logo-mark{background:var(--d4-vgreen);color:var(--d4-cream);}
+  #d4 .logo-white{background:var(--d4-brick);color:var(--d4-cream);}
+  #d4 .retro-wordmark{
+    display:inline-flex;flex-direction:column;align-items:center;line-height:1;gap:4px;
+  }
+  #d4 .retro-wordmark .en{
+    font-family:'DM Serif Display',serif;font-style:italic;font-size:22px;color:var(--d4-brick);letter-spacing:.08em;
+  }
+  #d4 .retro-wordmark .kr{
+    font-family:'Gowun Batang',serif;font-weight:700;font-size:88px;color:var(--d4-vgreen);letter-spacing:-.02em;
+  }
+  #d4 .retro-wordmark .est{
+    font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.3em;color:rgba(30,26,18,.55);
+    display:flex;align-items:center;gap:10px;margin-top:6px;
+  }
+  #d4 .retro-wordmark .est span:before,#d4 .retro-wordmark .est span:after{content:"·";margin:0 6px;opacity:.55;}
+  #d4 .grid-color{grid-template-columns:1.4fr 1fr 1fr 1fr 1fr;}
+  #d4 .grid-app{grid-template-columns:auto auto 1fr;align-items:stretch;}
+</style>
+</head>
+<body>
+
+  <!-- ========== MASTHEAD ========== -->
+  <header class="masthead">
+    <h1>한끼픽<br><em>Brand Identity —</em> 4 Directions</h1>
+    <div class="meta">
+      Client / 한끼픽 (Hankki Pick)<br>
+      Category / Food-Delivery · Recommendation<br>
+      Target / 20s Single-Household, Students<br>
+      Version / v0.1 — 2026.09
+    </div>
+  </header>
+
+  <div class="kicker">
+    <div><b>포지셔닝</b>매일 반복되는 "오늘은 또 뭐 먹지…"를 대신 골라주는 픽러(pick-er)</div>
+    <div><b>키 메시지</b>고민은 짧게, 한 끼는 확실하게</div>
+    <div><b>퍼스낼리티</b>친근하지만 감각적, 살짝 시니컬한 위트</div>
+    <div><b>탐색 방향</b>프리미엄 뉴트로 → B급 팝 → 쿨 미니멀 → 레트로 캐릭터</div>
+  </div>
+
+  <!-- ========== STICKY NAV ========== -->
+  <nav class="nav">
+    <div class="nav-inner">
+      <div class="label">— Explore</div>
+      <div class="nav-links">
+        <a href="#d1"><span class="num">01</span>Fresh Pick</a>
+        <a href="#d2"><span class="num">02</span>찍먹</a>
+        <a href="#d3"><span class="num">03</span>Pick.001</a>
+        <a href="#d4"><span class="num">04</span>한끼商會</a>
+      </div>
+      <div class="label">4 Directions</div>
+    </div>
+  </nav>
+
+  <!-- ================================================== -->
+  <!-- DIRECTION 01 · FRESH PICK                          -->
+  <!-- ================================================== -->
+  <section class="dir" id="d1">
+    <div class="dir-header">
+      <div class="dir-num"><span>Direction</span><span class="big">01</span></div>
+      <div class="dir-title">
+        <div class="en">Fresh Pick · Premium Newtro</div>
+        <h2>고르는 즐거움, 잘 차려낸 한 끼</h2>
+        <div class="desc">마켓컬리의 정제된 뉴트로 감성을 배달 카테고리로 옮겨왔어요. 클래식 세리프 워드마크에 산뜻한 그라스 그린을 액센트로 얹어, 감각적인 1인 가구 소비자에게 "잘 고르는 앱"이라는 신뢰감을 전달합니다.</div>
+      </div>
+      <div class="dir-tags">
+        MOOD / Refined, Editorial<br>
+        TYPE / Nanum Myeongjo × Pretendard<br>
+        COLOR / Deep Forest + Grass + Oat
+      </div>
+    </div>
+
+    <!-- LOGO -->
+    <div class="grid grid-logo">
+      <div class="panel logo-primary">
+        <span class="tag">01 · Primary</span>
+        <div class="logo-stage tall">
+          <div class="wordmark">한끼<span class="dot">·</span>픽<em>pick</em></div>
+        </div>
+        <div class="caption"><span>Primary Wordmark</span><span>가로형 / 워드마크</span></div>
+      </div>
+      <div class="panel logo-mark">
+        <span class="tag" style="color:rgba(240,235,222,.6);">02 · Symbol</span>
+        <div class="logo-stage tall">
+          <svg width="150" height="150" viewBox="0 0 150 150" fill="none">
+            <circle cx="75" cy="75" r="60" stroke="#f0ebde" stroke-width="1.5" opacity=".35"/>
+            <path d="M75 30 C 55 45, 45 70, 55 100 C 62 118, 78 118, 85 100 C 95 70, 90 45, 75 30 Z"
+                  fill="#f0ebde"/>
+            <path d="M75 42 L 75 108" stroke="#1c3a24" stroke-width="1.4" opacity=".6"/>
+            <text x="75" y="138" text-anchor="middle" font-family="IBM Plex Mono" font-size="9" fill="#f0ebde" letter-spacing="2">HANKKI · PICK</text>
+          </svg>
+        </div>
+        <div class="caption" style="color:rgba(240,235,222,.55);border-color:rgba(240,235,222,.15);"><span>Leaf Symbol</span><span>단독 심볼</span></div>
+      </div>
+      <div class="panel logo-white">
+        <span class="tag" style="color:rgba(250,246,234,.7);">03 · Reversed</span>
+        <div class="logo-stage tall">
+          <div style="font-family:'Nanum Myeongjo',serif;font-weight:800;font-size:52px;letter-spacing:-.03em;color:#faf6ea;line-height:1;text-align:center;">
+            한끼<br><em style="font-style:italic;font-weight:400;font-size:.4em;letter-spacing:.2em;opacity:.85;">pick.</em>
+          </div>
+        </div>
+        <div class="caption" style="color:rgba(250,246,234,.65);border-color:rgba(250,246,234,.2);"><span>Stacked / Reversed</span><span>세로형 / 반전</span></div>
+      </div>
+    </div>
+
+    <!-- COLOR -->
+    <div class="grid grid-color">
+      <div class="panel" style="background:#1c3a24;color:#f0ebde;padding:20px;">
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:.1em;opacity:.6;">Palette · 01</div>
+        <div style="font-family:'Nanum Myeongjo',serif;font-size:34px;margin-top:60px;font-weight:800;letter-spacing:-.02em;">Forest &<br>Grass</div>
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;opacity:.5;margin-top:16px;letter-spacing:.05em;">Deep, calm, editorial</div>
+      </div>
+      <div class="swatch" style="background:#1c3a24;color:#f0ebde;">
+        <div class="role">Primary</div>
+        <div><div class="name">Deep Forest</div><div class="hex">#1C3A24</div></div>
+      </div>
+      <div class="swatch" style="background:#5f8c3e;color:#faf6ea;">
+        <div class="role">Accent</div>
+        <div><div class="name">Grass</div><div class="hex">#5F8C3E</div></div>
+      </div>
+      <div class="swatch" style="background:#f0ebde;color:#1c3a24;">
+        <div class="role">Base</div>
+        <div><div class="name">Oat</div><div class="hex">#F0EBDE</div></div>
+      </div>
+      <div class="swatch" style="background:#faf6ea;color:#1c3a24;border:1px solid rgba(15,16,14,.08);">
+        <div class="role">Paper</div>
+        <div><div class="name">Cream</div><div class="hex">#FAF6EA</div></div>
+      </div>
+    </div>
+
+    <!-- TYPE -->
+    <div class="grid" style="grid-template-columns:1fr 1fr;">
+      <div class="panel" style="background:#faf6ea;">
+        <div class="type-row">
+          <div class="meta"><span>Display / Nanum Myeongjo Bold</span><span>72 / 68</span></div>
+          <div style="font-family:'Nanum Myeongjo',serif;font-weight:800;font-size:52px;letter-spacing:-.03em;color:#1c3a24;line-height:1.02;">
+            오늘은 또 뭐<br>먹지…<em style="font-style:italic;color:#5f8c3e;">고민은 우리가.</em>
+          </div>
+        </div>
+        <div class="type-row">
+          <div class="meta"><span>Body / Pretendard 400</span><span>15 / 24</span></div>
+          <div style="font-family:'Pretendard';font-size:15px;line-height:1.6;color:#1c3a24;max-width:440px;">
+            취향, 예산, 오늘의 기분까지. 세 번의 탭이면 한끼픽이 오늘 저녁을 대신 골라드려요. 검증된 리뷰와 1인 메뉴만 선별합니다.
+          </div>
+        </div>
+        <div class="type-row">
+          <div class="meta"><span>Caption / IBM Plex Mono 400</span><span>11 / .08em</span></div>
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#1c3a24;opacity:.7;">
+            EST. 2026 · SEOUL · SINGLE-MEAL EDITION
+          </div>
+        </div>
+      </div>
+
+      <div class="panel" style="background:#f0ebde;">
+        <div style="padding:28px;">
+          <div class="meta" style="font-family:'IBM Plex Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:.1em;opacity:.55;margin-bottom:16px;">Voice Sample · 카피</div>
+          <div style="display:flex;flex-direction:column;gap:20px;">
+            <div style="font-family:'Nanum Myeongjo',serif;font-size:28px;font-style:italic;color:#1c3a24;line-height:1.3;">
+              "고르는 시간까지가 배고픔이더라고요."
+            </div>
+            <div style="height:1px;background:rgba(28,58,36,.2);"></div>
+            <div style="font-family:'Pretendard';font-size:14px;line-height:1.7;color:#1c3a24;">
+              · 3분 안에, 오늘의 한 끼<br>
+              · 리뷰 3점대 이하는 절대 안 보여줘요<br>
+              · 1인분 · 배달비 3천원 이하 우선 정렬
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- APPLICATION -->
+    <div class="grid grid-app" style="grid-template-columns:auto auto 1fr;">
+      <div class="panel" style="background:#faf6ea;">
+        <div class="logo-mini">
+          <div class="app-icon" style="background:#1c3a24;">
+            <div style="font-family:'Nanum Myeongjo',serif;font-weight:800;color:#f0ebde;font-size:56px;line-height:.9;text-align:center;">
+              픽<span style="color:#5f8c3e;">.</span>
+            </div>
+          </div>
+        </div>
+        <div class="caption"><span>App Icon</span><span>iOS / 132</span></div>
+      </div>
+      <div class="panel" style="background:#5f8c3e;">
+        <div class="logo-mini" style="padding:0;">
+          <div class="phone" style="background:#faf6ea;color:#1c3a24;">
+            <div class="notch"></div>
+            <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:.1em;opacity:.55;text-transform:uppercase;">Tue · 19:24</div>
+            <div style="font-family:'Nanum Myeongjo',serif;font-weight:800;font-size:22px;line-height:1.1;margin-top:8px;letter-spacing:-.02em;">
+              오늘의<br>한끼픽<em style="font-style:italic;font-weight:400;color:#5f8c3e;font-size:.6em;"> ↳</em>
+            </div>
+            <div style="margin-top:14px;height:1px;background:rgba(28,58,36,.2);"></div>
+            <div style="margin-top:12px;background:#f0ebde;border-radius:10px;padding:12px;">
+              <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;opacity:.6;">PICK · 01</div>
+              <div style="font-family:'Pretendard';font-weight:600;font-size:14px;margin-top:4px;">들기름 막국수</div>
+              <div style="font-family:'Pretendard';font-size:11px;opacity:.6;margin-top:2px;">신전분식 · ★4.7 · 배달 22m</div>
+            </div>
+            <div style="margin-top:8px;background:#1c3a24;border-radius:10px;padding:12px;color:#f0ebde;">
+              <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;opacity:.7;">PICK · 02</div>
+              <div style="font-family:'Pretendard';font-weight:600;font-size:14px;margin-top:4px;">규동 정식</div>
+              <div style="font-family:'Pretendard';font-size:11px;opacity:.7;margin-top:2px;">스키야 · ★4.6 · 배달 28m</div>
+            </div>
+            <div style="position:absolute;bottom:16px;left:14px;right:14px;background:#5f8c3e;color:#faf6ea;border-radius:22px;padding:10px 0;text-align:center;font-family:'Pretendard';font-weight:600;font-size:12px;">
+              다른 픽 보기 →
+            </div>
+          </div>
+        </div>
+        <div class="caption" style="color:rgba(250,246,234,.7);border-color:rgba(250,246,234,.2);"><span>Mobile · Home</span><span>375 × 812</span></div>
+      </div>
+      <div class="panel" style="background:#f0ebde;">
+        <div style="padding:32px;height:100%;display:flex;flex-direction:column;justify-content:space-between;min-height:280px;">
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:.1em;opacity:.55;">Signage / Instore</div>
+          <div style="font-family:'Nanum Myeongjo',serif;font-weight:800;font-size:72px;letter-spacing:-.03em;color:#1c3a24;line-height:.95;">
+            잘 고른 한 끼는<br><em style="font-style:italic;color:#5f8c3e;">기분까지 바꾸니까.</em>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:rgba(28,58,36,.55);">
+            <span>한끼픽 · EST. 2026</span><span>Ed. 001 / Fresh Pick</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================================================== -->
+  <!-- DIRECTION 02 · 찍먹                                -->
+  <!-- ================================================== -->
+  <section class="dir" id="d2">
+    <div class="dir-header">
+      <div class="dir-num"><span>Direction</span><span class="big">02</span></div>
+      <div class="dir-title">
+        <div class="en">찍먹 · B-Class Pop</div>
+        <h2>고민말고, 그냥 찍먹.</h2>
+        <div class="desc">배달의민족의 B급 위트와 쿠캣의 팝 컬러가 만난 지점. 도장 찍듯 툭 뽑아내는 스탬프 로고, 라임그린 형광 액센트로 스크롤 피드에서 눈에 확 박히는 캐릭터를 만듭니다.</div>
+      </div>
+      <div class="dir-tags">
+        MOOD / Loud, Playful, Streety<br>
+        TYPE / Black Han Sans × Do Hyeon<br>
+        COLOR / Lime + Ink + Hot Coral
+      </div>
+    </div>
+
+    <!-- LOGO -->
+    <div class="grid grid-logo">
+      <div class="panel logo-primary">
+        <span class="tag">01 · Primary</span>
+        <div class="logo-stage tall">
+          <div class="stamp-wordmark">
+            <div class="top">TODAY'S</div>
+            <div class="main">한끼<span class="p">픽!</span></div>
+          </div>
+        </div>
+        <div class="caption"><span>Stamp Wordmark</span><span>도장형 / 메인</span></div>
+      </div>
+      <div class="panel logo-mark">
+        <span class="tag" style="color:rgba(200,255,46,.7);">02 · Bubble</span>
+        <div class="logo-stage tall">
+          <div class="bubble">픽!</div>
+        </div>
+        <div class="caption" style="color:rgba(200,255,46,.55);border-color:rgba(200,255,46,.15);"><span>Speech Mark</span><span>말풍선 심볼</span></div>
+      </div>
+      <div class="panel logo-white">
+        <span class="tag" style="color:rgba(255,254,240,.75);">03 · Sticker</span>
+        <div class="logo-stage tall">
+          <svg width="170" height="170" viewBox="0 0 170 170">
+            <defs>
+              <path id="circle-txt" d="M 85 85 m -60 0 a 60 60 0 1 1 120 0 a 60 60 0 1 1 -120 0"/>
+            </defs>
+            <circle cx="85" cy="85" r="72" fill="#fffef0"/>
+            <circle cx="85" cy="85" r="60" fill="none" stroke="#111411" stroke-width="1.5" stroke-dasharray="4 4"/>
+            <text font-family="Do Hyeon" font-size="12" fill="#111411" letter-spacing="4">
+              <textPath href="#circle-txt">· 오늘도 · 한끼픽 · TODAY'S PICK · 오늘도 · 한끼픽 ·</textPath>
+            </text>
+            <text x="85" y="80" text-anchor="middle" font-family="Black Han Sans" font-size="34" fill="#ff4a1c">한끼</text>
+            <text x="85" y="110" text-anchor="middle" font-family="Black Han Sans" font-size="34" fill="#111411">픽!</text>
+          </svg>
+        </div>
+        <div class="caption" style="color:rgba(255,254,240,.7);border-color:rgba(255,254,240,.2);"><span>Circular Sticker</span><span>스티커 응용</span></div>
+      </div>
+    </div>
+
+    <!-- COLOR -->
+    <div class="grid grid-color">
+      <div class="panel" style="background:#c8ff2e;color:#111411;padding:20px;">
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:.1em;opacity:.6;">Palette · 02</div>
+        <div style="font-family:'Black Han Sans',sans-serif;font-size:44px;margin-top:56px;line-height:.9;letter-spacing:-.01em;">
+          형광<br>&amp; 잉크
+        </div>
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;opacity:.6;margin-top:16px;letter-spacing:.05em;">Loud, streety, snackable</div>
+      </div>
+      <div class="swatch" style="background:#c8ff2e;color:#111411;">
+        <div class="role">Primary</div>
+        <div><div class="name">Neo Lime</div><div class="hex">#C8FF2E</div></div>
+      </div>
+      <div class="swatch" style="background:#111411;color:#c8ff2e;">
+        <div class="role">Base</div>
+        <div><div class="name">Ink Black</div><div class="hex">#111411</div></div>
+      </div>
+      <div class="swatch" style="background:#ff4a1c;color:#fffef0;">
+        <div class="role">Accent</div>
+        <div><div class="name">Hot Coral</div><div class="hex">#FF4A1C</div></div>
+      </div>
+    </div>
+
+    <!-- TYPE -->
+    <div class="grid" style="grid-template-columns:1fr 1fr;">
+      <div class="panel" style="background:#fffef0;">
+        <div class="type-row">
+          <div class="meta"><span>Display / Black Han Sans</span><span>72 / 60</span></div>
+          <div style="font-family:'Black Han Sans',sans-serif;font-size:60px;line-height:.95;color:#111411;letter-spacing:-.02em;">
+            <span style="background:#c8ff2e;padding:0 8px;">고민말고</span><br>그냥 <span style="color:#ff4a1c;">찍먹.</span>
+          </div>
+        </div>
+        <div class="type-row">
+          <div class="meta"><span>Sub / Do Hyeon</span><span>18 / 26</span></div>
+          <div style="font-family:'Do Hyeon',sans-serif;font-size:18px;line-height:1.5;color:#111411;max-width:420px;">
+            메뉴 못 정하고 30분 스크롤한 당신,<br>오늘은 한끼픽이 그냥 하나 정해드림.
+          </div>
+        </div>
+        <div class="type-row">
+          <div class="meta"><span>Caption / Pretendard 500</span><span>13 / .04em</span></div>
+          <div style="font-family:'Pretendard';font-weight:500;font-size:13px;color:#111411;letter-spacing:.02em;">
+            #오늘저녁뭐먹지 #자취생메뉴 #배달비3천원컷 #한끼픽
+          </div>
+        </div>
+      </div>
+
+      <div class="panel" style="background:#111411;color:#c8ff2e;">
+        <div style="padding:28px;">
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:.1em;opacity:.55;margin-bottom:16px;">Voice Sample · 카피 톤</div>
+          <div style="display:flex;flex-direction:column;gap:18px;">
+            <div style="font-family:'Black Han Sans',sans-serif;font-size:34px;line-height:1.1;">
+              "고를 시간에 <span style="color:#ff4a1c;">먹지.</span>"
+            </div>
+            <div style="height:1px;background:rgba(200,255,46,.2);"></div>
+            <div style="display:flex;flex-direction:column;gap:8px;font-family:'Do Hyeon',sans-serif;font-size:16px;">
+              <div>▸ 3초컷 픽 · 룰렛 모드</div>
+              <div>▸ 배고픔 지수별 정렬</div>
+              <div>▸ "그거 말고" 버튼 <span style="color:#ff4a1c;">무제한</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- APPLICATION -->
+    <div class="grid grid-app">
+      <div class="panel" style="background:#fffef0;">
+        <div class="logo-mini">
+          <div class="app-icon" style="background:#c8ff2e;">
+            <div style="font-family:'Black Han Sans',sans-serif;color:#111411;font-size:60px;transform:rotate(-4deg);line-height:.9;">
+              픽<span style="color:#ff4a1c;">!</span>
+            </div>
+          </div>
+        </div>
+        <div class="caption"><span>App Icon</span><span>iOS / 132</span></div>
+      </div>
+      <div class="panel" style="background:#c8ff2e;">
+        <div class="logo-mini" style="padding:0;">
+          <div class="phone" style="background:#111411;color:#fffef0;">
+            <div class="notch" style="background:rgba(255,254,240,.3);"></div>
+            <div style="font-family:'Do Hyeon',sans-serif;font-size:11px;opacity:.6;">HANKKI · PICK</div>
+            <div style="font-family:'Black Han Sans',sans-serif;font-size:26px;line-height:1;margin-top:6px;">
+              오늘은<br><span style="color:#c8ff2e;">이거 찍먹.</span>
+            </div>
+            <div style="margin-top:14px;background:#c8ff2e;border-radius:12px;padding:14px;color:#111411;">
+              <div style="font-family:'Do Hyeon',sans-serif;font-size:10px;opacity:.7;">RANDOM PICK · 3초컷</div>
+              <div style="font-family:'Black Han Sans',sans-serif;font-size:20px;margin-top:4px;line-height:1;">마라 떡볶이</div>
+              <div style="font-family:'Pretendard';font-size:10px;margin-top:4px;">쿠쿠분식 · ★4.5</div>
+            </div>
+            <div style="margin-top:8px;display:flex;gap:6px;">
+              <div style="flex:1;background:#ff4a1c;color:#fffef0;text-align:center;padding:10px 0;border-radius:20px;font-family:'Do Hyeon',sans-serif;font-size:12px;">그거말고</div>
+              <div style="flex:1;background:#fffef0;color:#111411;text-align:center;padding:10px 0;border-radius:20px;font-family:'Do Hyeon',sans-serif;font-size:12px;">주문!</div>
+            </div>
+            <div style="position:absolute;bottom:14px;left:14px;right:14px;text-align:center;font-family:'IBM Plex Mono',monospace;font-size:9px;opacity:.4;letter-spacing:.1em;">
+              SWIPE · SWIPE · SWIPE
+            </div>
+          </div>
+        </div>
+        <div class="caption"><span>Random Pick Screen</span><span>375 × 812</span></div>
+      </div>
+      <div class="panel" style="background:#ff4a1c;color:#fffef0;">
+        <div style="padding:32px;height:100%;display:flex;flex-direction:column;justify-content:space-between;min-height:280px;">
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:.1em;opacity:.7;">SNS Ad / 1080 × 1350</div>
+          <div style="font-family:'Black Han Sans',sans-serif;font-size:76px;letter-spacing:-.02em;line-height:.95;">
+            안 정해지면<br><span style="background:#c8ff2e;color:#111411;padding:0 10px;">우리가 정함.</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:end;font-family:'Do Hyeon',sans-serif;font-size:13px;">
+            <span>#한끼픽 #오늘저녁</span>
+            <div style="background:#111411;color:#c8ff2e;padding:6px 12px;border-radius:6px;font-family:'Black Han Sans',sans-serif;font-size:16px;transform:rotate(-3deg);">픽!</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================================================== -->
+  <!-- DIRECTION 03 · Pick.001                            -->
+  <!-- ================================================== -->
+  <section class="dir" id="d3">
+    <div class="dir-header">
+      <div class="dir-num"><span>Direction</span><span class="big">03</span></div>
+      <div class="dir-title">
+        <div class="en">Pick.001 · Cool Minimal / Techy</div>
+        <h2>오늘의 큐레이션, 코드처럼 정확히.</h2>
+        <div class="desc">터미널 커서를 모티브로 한, 조용하지만 단단한 UI스러운 브랜딩. 모노스페이스 워드마크와 매트한 다크 그린으로 "감각적으로 잘 고르는 사람들"을 위한 조용한 정확성을 표현합니다.</div>
+      </div>
+      <div class="dir-tags">
+        MOOD / Quiet, Precise, Editor<br>
+        TYPE / IBM Plex Mono × Pretendard<br>
+        COLOR / Matte Forest + Fog + Cursor Mint
+      </div>
+    </div>
+
+    <!-- LOGO -->
+    <div class="grid grid-logo">
+      <div class="panel logo-primary">
+        <span class="tag">01 · Primary</span>
+        <div class="logo-stage tall">
+          <div class="mono-wordmark">
+            <span class="brk">[</span>hankki<span class="brk">/</span>pick<span class="brk">]</span><span class="caret"></span>
+          </div>
+        </div>
+        <div class="caption"><span>Mono Wordmark</span><span>가로형 / 브래킷</span></div>
+      </div>
+      <div class="panel logo-mark">
+        <span class="tag" style="color:rgba(201,228,183,.65);">02 · Symbol</span>
+        <div class="logo-stage tall">
+          <svg width="140" height="140" viewBox="0 0 140 140" fill="none">
+            <rect x="10" y="10" width="120" height="120" rx="20" stroke="#c9e4b7" stroke-width="1.5" opacity=".35"/>
+            <text x="34" y="82" font-family="IBM Plex Mono" font-size="42" fill="#c9e4b7" font-weight="500">/</text>
+            <rect x="68" y="46" width="4" height="42" fill="#c9e4b7">
+              <animate attributeName="opacity" values="1;0;1" dur="1s" repeatCount="indefinite"/>
+            </rect>
+            <text x="82" y="82" font-family="IBM Plex Mono" font-size="42" fill="#c9e4b7" font-weight="500">픽</text>
+            <text x="70" y="120" text-anchor="middle" font-family="IBM Plex Mono" font-size="8" fill="#c9e4b7" opacity=".6" letter-spacing="2">v.001</text>
+          </svg>
+        </div>
+        <div class="caption" style="color:rgba(201,228,183,.55);border-color:rgba(201,228,183,.15);"><span>Cursor Mark</span><span>커서 심볼</span></div>
+      </div>
+      <div class="panel logo-white">
+        <span class="tag" style="color:rgba(90,255,138,.75);">03 · Terminal</span>
+        <div class="logo-stage tall">
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:14px;color:#5aff8a;line-height:1.6;text-align:left;padding:0 20px;">
+            <div style="opacity:.55;">$ ./hankkipick --today</div>
+            <div>&gt; picking a meal for you<span style="animation:blink 1s steps(2) infinite;">_</span></div>
+            <div style="opacity:.85;color:#c9e4b7;">✓ found. serving now.</div>
+          </div>
+        </div>
+        <div class="caption" style="color:rgba(90,255,138,.7);border-color:rgba(90,255,138,.2);"><span>Terminal Motif</span><span>CLI 응용</span></div>
+      </div>
+    </div>
+
+    <!-- COLOR -->
+    <div class="grid grid-color">
+      <div class="panel" style="background:#2e3e2c;color:#c9e4b7;padding:20px;">
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:.1em;opacity:.6;">Palette · 03</div>
+        <div style="font-family:'IBM Plex Mono',monospace;font-weight:500;font-size:36px;margin-top:56px;line-height:1;letter-spacing:-.02em;">
+          matte /<br>cursor
+        </div>
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;opacity:.5;margin-top:16px;letter-spacing:.05em;">Quiet system UI</div>
+      </div>
+      <div class="swatch" style="background:#2e3e2c;color:#c9e4b7;">
+        <div class="role">Primary</div>
+        <div><div class="name">Matte Forest</div><div class="hex">#2E3E2C</div></div>
+      </div>
+      <div class="swatch" style="background:#c9e4b7;color:#2e3e2c;">
+        <div class="role">Accent</div>
+        <div><div class="name">Sprout</div><div class="hex">#C9E4B7</div></div>
+      </div>
+      <div class="swatch" style="background:#eeece4;color:#2e3e2c;border:1px solid rgba(15,16,14,.08);">
+        <div class="role">Base</div>
+        <div><div class="name">Fog</div><div class="hex">#EEECE4</div></div>
+      </div>
+    </div>
+
+    <!-- TYPE -->
+    <div class="grid" style="grid-template-columns:1fr 1fr;">
+      <div class="panel" style="background:#eeece4;">
+        <div class="type-row">
+          <div class="meta"><span>Display / IBM Plex Mono 500</span><span>52 / -.02em</span></div>
+          <div style="font-family:'IBM Plex Mono',monospace;font-weight:500;font-size:44px;line-height:1.05;color:#2e3e2c;letter-spacing:-.02em;">
+            오늘의 픽,<br>정확히 <span style="background:#2e3e2c;color:#c9e4b7;padding:0 6px;">1개.</span>
+          </div>
+        </div>
+        <div class="type-row">
+          <div class="meta"><span>Body / Pretendard 400</span><span>14 / 22</span></div>
+          <div style="font-family:'Pretendard';font-size:14px;line-height:1.6;color:#2e3e2c;max-width:440px;">
+            취향 데이터를 학습한 큐레이션 엔진이 매일 저녁 6시, 오늘의 한 끼를 조용히 서빙합니다. 결정 피로 제로.
+          </div>
+        </div>
+        <div class="type-row">
+          <div class="meta"><span>Meta / IBM Plex Mono 400</span><span>10 / .1em</span></div>
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:#2e3e2c;opacity:.65;">
+            v.001 · build 2026.09 · seoul-mapo
+          </div>
+        </div>
+      </div>
+
+      <div class="panel" style="background:#2e3e2c;color:#c9e4b7;">
+        <div style="padding:28px;">
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:.1em;opacity:.55;margin-bottom:16px;">Voice Sample</div>
+          <div style="display:flex;flex-direction:column;gap:20px;">
+            <div style="font-family:'IBM Plex Mono',monospace;font-weight:500;font-size:22px;line-height:1.3;">
+              "결정, 우리가.<br>당신은 <span style="color:#5aff8a;">먹기만.</span>"
+            </div>
+            <div style="height:1px;background:rgba(201,228,183,.2);"></div>
+            <div style="font-family:'IBM Plex Mono',monospace;font-size:12px;line-height:1.9;">
+              &gt; 결정피로 -87%<br>
+              &gt; 취향적중률 92%<br>
+              &gt; 평균 결정시간 4.2s
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- APPLICATION -->
+    <div class="grid grid-app">
+      <div class="panel" style="background:#eeece4;">
+        <div class="logo-mini">
+          <div class="app-icon" style="background:#2e3e2c;">
+            <svg width="80" height="80" viewBox="0 0 80 80">
+              <text x="12" y="50" font-family="IBM Plex Mono" font-size="32" fill="#c9e4b7" font-weight="500">/</text>
+              <rect x="34" y="24" width="3" height="28" fill="#c9e4b7">
+                <animate attributeName="opacity" values="1;0;1" dur="1s" repeatCount="indefinite"/>
+              </rect>
+              <text x="42" y="50" font-family="IBM Plex Mono" font-size="32" fill="#c9e4b7" font-weight="500">픽</text>
+            </svg>
+          </div>
+        </div>
+        <div class="caption"><span>App Icon</span><span>iOS / 132</span></div>
+      </div>
+      <div class="panel" style="background:#2e3e2c;">
+        <div class="logo-mini" style="padding:0;">
+          <div class="phone" style="background:#eeece4;color:#2e3e2c;">
+            <div class="notch"></div>
+            <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:.1em;opacity:.55;text-transform:uppercase;display:flex;justify-content:space-between;">
+              <span>[hankki/pick]</span><span>18:00</span>
+            </div>
+            <div style="font-family:'IBM Plex Mono',monospace;font-weight:500;font-size:18px;margin-top:10px;line-height:1.15;letter-spacing:-.01em;">
+              &gt; today.pick<br>&nbsp;&nbsp;.<span style="color:#5f8c3e;">serving()</span>
+            </div>
+            <div style="margin-top:14px;padding:12px;border:1px dashed rgba(46,62,44,.3);border-radius:6px;">
+              <div class="mono-badge" style="display:inline-block;color:#2e3e2c;">01 · 확정</div>
+              <div style="font-family:'Pretendard';font-weight:600;font-size:15px;margin-top:8px;">비빔국수 정식</div>
+              <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;opacity:.6;margin-top:2px;letter-spacing:.02em;">면가락 · ★4.7 · 22m</div>
+            </div>
+            <div style="margin-top:8px;padding:10px 12px;background:rgba(46,62,44,.06);border-radius:6px;font-family:'IBM Plex Mono',monospace;font-size:10px;line-height:1.6;">
+              matched / 취향:매콤,국물X<br>
+              matched / 예산:12k 이하<br>
+              matched / 배달:30m 이하
+            </div>
+            <div style="position:absolute;bottom:14px;left:14px;right:14px;background:#2e3e2c;color:#c9e4b7;text-align:center;padding:12px 0;border-radius:6px;font-family:'IBM Plex Mono',monospace;font-weight:500;font-size:12px;letter-spacing:.04em;">
+              ENTER · 주문하기
+            </div>
+          </div>
+        </div>
+        <div class="caption" style="color:rgba(201,228,183,.7);border-color:rgba(201,228,183,.2);"><span>Today Screen</span><span>375 × 812</span></div>
+      </div>
+      <div class="panel" style="background:#0e120d;color:#5aff8a;">
+        <div style="padding:32px;height:100%;display:flex;flex-direction:column;justify-content:space-between;min-height:280px;">
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:.1em;opacity:.55;">terminal poster</div>
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:16px;line-height:1.7;">
+            <div style="opacity:.55;">$ what.should.i.eat</div>
+            <div>&gt; loading...</div>
+            <div>&gt; matched: <span style="color:#c9e4b7;">1 result</span></div>
+            <div style="margin-top:20px;font-family:'Pretendard';font-weight:600;font-size:30px;color:#eeece4;letter-spacing:-.02em;line-height:1.1;">
+              오늘은 이거<br>먹어봐요.
+            </div>
+          </div>
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;opacity:.5;letter-spacing:.15em;">
+            HANKKI/PICK · v.001 · a quiet food picker
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================================================== -->
+  <!-- DIRECTION 04 · 한끼商會                             -->
+  <!-- ================================================== -->
+  <section class="dir" id="d4">
+    <div class="dir-header">
+      <div class="dir-num"><span>Direction</span><span class="big">04</span></div>
+      <div class="dir-title">
+        <div class="en">한끼商會 · Retro Signboard</div>
+        <h2>동네 밥집 간판처럼, 오래 살아남을 브랜드.</h2>
+        <div class="desc">70-80년대 간판 서체와 빈티지 그린을 현대적으로 재해석한 레트로 감성. 오래된 밥집의 신뢰감을 유지하면서, 젓가락 캐릭터로 젊은 세대의 애착 요소를 더했습니다.</div>
+      </div>
+      <div class="dir-tags">
+        MOOD / Retro, Warm, Neighborhood<br>
+        TYPE / Gowun Batang × DM Serif Display<br>
+        COLOR / Vintage Green + Brick + Cream
+      </div>
+    </div>
+
+    <!-- LOGO -->
+    <div class="grid grid-logo">
+      <div class="panel logo-primary">
+        <span class="tag">01 · Primary</span>
+        <div class="logo-stage tall">
+          <div class="retro-wordmark">
+            <div class="en">— HANKKI PICK —</div>
+            <div class="kr">한끼픽</div>
+            <div class="est"><span>EST 2026</span><span>SEOUL</span><span>商會</span></div>
+          </div>
+        </div>
+        <div class="caption"><span>Signboard Wordmark</span><span>간판형 / 메인</span></div>
+      </div>
+      <div class="panel logo-mark">
+        <span class="tag" style="color:rgba(244,234,211,.7);">02 · Character</span>
+        <div class="logo-stage tall">
+          <svg width="150" height="150" viewBox="0 0 150 150">
+            <!-- bowl -->
+            <path d="M25 78 Q75 130 125 78 L 118 78 Q 75 118 32 78 Z" fill="#f4ead3"/>
+            <ellipse cx="75" cy="78" rx="50" ry="6" fill="#e8b23a"/>
+            <!-- chopsticks with face -->
+            <rect x="60" y="20" width="6" height="55" rx="2" fill="#f4ead3" transform="rotate(-8 63 47)"/>
+            <rect x="84" y="20" width="6" height="55" rx="2" fill="#f4ead3" transform="rotate(8 87 47)"/>
+            <!-- noodle held -->
+            <path d="M70 34 Q 75 26 80 34" stroke="#e8b23a" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+            <!-- face -->
+            <circle cx="65" cy="98" r="2" fill="#3b6b3a"/>
+            <circle cx="85" cy="98" r="2" fill="#3b6b3a"/>
+            <path d="M68 106 Q 75 112 82 106" stroke="#3b6b3a" stroke-width="2" fill="none" stroke-linecap="round"/>
+            <!-- cheek -->
+            <circle cx="58" cy="103" r="2.5" fill="#c85d3a" opacity=".6"/>
+            <circle cx="92" cy="103" r="2.5" fill="#c85d3a" opacity=".6"/>
+          </svg>
+        </div>
+        <div class="caption" style="color:rgba(244,234,211,.55);border-color:rgba(244,234,211,.15);"><span>Bowl Mascot</span><span>밥그릇 마스코트</span></div>
+      </div>
+      <div class="panel logo-white">
+        <span class="tag" style="color:rgba(244,234,211,.75);">03 · Seal</span>
+        <div class="logo-stage tall">
+          <svg width="150" height="150" viewBox="0 0 150 150">
+            <rect x="15" y="15" width="120" height="120" rx="4" fill="#3b6b3a" stroke="#f4ead3" stroke-width="1.5"/>
+            <rect x="22" y="22" width="106" height="106" rx="2" fill="none" stroke="#f4ead3" stroke-width="1" opacity=".5"/>
+            <text x="75" y="55" text-anchor="middle" font-family="Gowun Batang" font-size="36" font-weight="700" fill="#f4ead3">한</text>
+            <text x="75" y="95" text-anchor="middle" font-family="Gowun Batang" font-size="36" font-weight="700" fill="#f4ead3">끼</text>
+            <line x1="30" y1="105" x2="120" y2="105" stroke="#f4ead3" stroke-width=".5" opacity=".5"/>
+            <text x="75" y="122" text-anchor="middle" font-family="DM Serif Display" font-style="italic" font-size="12" fill="#e8b23a" letter-spacing="2">pick.</text>
+          </svg>
+        </div>
+        <div class="caption" style="color:rgba(244,234,211,.7);border-color:rgba(244,234,211,.2);"><span>Square Seal</span><span>인장 응용</span></div>
+      </div>
+    </div>
+
+    <!-- COLOR -->
+    <div class="grid grid-color">
+      <div class="panel" style="background:#3b6b3a;color:#f4ead3;padding:20px;">
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:.1em;opacity:.6;">Palette · 04</div>
+        <div style="font-family:'Gowun Batang',serif;font-weight:700;font-size:40px;margin-top:56px;line-height:1;letter-spacing:-.02em;">
+          간판<br>초록
+        </div>
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;opacity:.55;margin-top:16px;letter-spacing:.05em;">Warm, aged, trusted</div>
+      </div>
+      <div class="swatch" style="background:#3b6b3a;color:#f4ead3;">
+        <div class="role">Primary</div>
+        <div><div class="name">Signboard Green</div><div class="hex">#3B6B3A</div></div>
+      </div>
+      <div class="swatch" style="background:#c85d3a;color:#f4ead3;">
+        <div class="role">Accent</div>
+        <div><div class="name">Brick</div><div class="hex">#C85D3A</div></div>
+      </div>
+      <div class="swatch" style="background:#e8b23a;color:#1e1a12;">
+        <div class="role">Accent</div>
+        <div><div class="name">Mustard</div><div class="hex">#E8B23A</div></div>
+      </div>
+      <div class="swatch" style="background:#f4ead3;color:#3b6b3a;border:1px solid rgba(15,16,14,.08);">
+        <div class="role">Base</div>
+        <div><div class="name">Cream</div><div class="hex">#F4EAD3</div></div>
+      </div>
+    </div>
+
+    <!-- TYPE -->
+    <div class="grid" style="grid-template-columns:1fr 1fr;">
+      <div class="panel" style="background:#f4ead3;">
+        <div class="type-row">
+          <div class="meta"><span>Display / Gowun Batang Bold</span><span>52 / 56</span></div>
+          <div style="font-family:'Gowun Batang',serif;font-weight:700;font-size:48px;line-height:1.05;color:#3b6b3a;letter-spacing:-.02em;">
+            오늘 한끼,<br><span style="color:#c85d3a;font-family:'DM Serif Display';font-style:italic;font-size:.85em;">잘 골랐네.</span>
+          </div>
+        </div>
+        <div class="type-row">
+          <div class="meta"><span>Body / Pretendard 400</span><span>15 / 24</span></div>
+          <div style="font-family:'Pretendard';font-size:15px;line-height:1.6;color:#1e1a12;max-width:440px;">
+            30년 된 동네 밥집이 SNS를 시작한 느낌으로. 손맛과 신뢰의 언어를, 젊은 세대의 리듬으로 다시 씁니다.
+          </div>
+        </div>
+        <div class="type-row">
+          <div class="meta"><span>Meta / DM Serif Italic</span><span>13 / .06em</span></div>
+          <div style="font-family:'DM Serif Display',serif;font-style:italic;font-size:14px;color:#c85d3a;letter-spacing:.04em;">
+            est. 2026 · seoul · a good meal, well picked.
+          </div>
+        </div>
+      </div>
+
+      <div class="panel" style="background:#3b6b3a;color:#f4ead3;background-image:repeating-linear-gradient(45deg,transparent 0 12px,rgba(244,234,211,.03) 12px 13px);">
+        <div style="padding:28px;">
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:.1em;opacity:.55;margin-bottom:16px;">Voice Sample · 카피</div>
+          <div style="display:flex;flex-direction:column;gap:20px;">
+            <div style="font-family:'Gowun Batang',serif;font-weight:700;font-size:28px;line-height:1.35;">
+              "잘 먹었습니다"가<br>인사가 되는 앱.
+            </div>
+            <div style="height:1px;background:rgba(244,234,211,.2);"></div>
+            <div style="font-family:'Pretendard';font-size:14px;line-height:1.7;">
+              · 오래 사랑받은 동네 맛집 우선<br>
+              · 사장님이 손편지로 답장하는 리뷰<br>
+              · 이번 주 한끼, 다음 주도 한끼
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- APPLICATION -->
+    <div class="grid grid-app">
+      <div class="panel" style="background:#f4ead3;">
+        <div class="logo-mini">
+          <div class="app-icon" style="background:#3b6b3a;">
+            <div style="font-family:'Gowun Batang',serif;font-weight:700;color:#f4ead3;font-size:56px;line-height:.9;text-align:center;">
+              한<br>끼
+            </div>
+          </div>
+        </div>
+        <div class="caption"><span>App Icon</span><span>iOS / 132</span></div>
+      </div>
+      <div class="panel" style="background:#c85d3a;">
+        <div class="logo-mini" style="padding:0;">
+          <div class="phone" style="background:#f4ead3;color:#1e1a12;">
+            <div class="notch"></div>
+            <div style="text-align:center;">
+              <div style="font-family:'DM Serif Display',serif;font-style:italic;font-size:11px;color:#c85d3a;letter-spacing:.15em;">— TODAY —</div>
+              <div style="font-family:'Gowun Batang',serif;font-weight:700;font-size:22px;color:#3b6b3a;line-height:1.1;margin-top:2px;">오늘의 한끼</div>
+            </div>
+            <div style="margin:14px -14px 0;height:1px;background:#3b6b3a;opacity:.3;"></div>
+            <div style="margin-top:14px;background:#3b6b3a;color:#f4ead3;padding:14px;border-radius:4px;text-align:center;">
+              <div style="font-family:'DM Serif Display',serif;font-style:italic;font-size:10px;opacity:.7;letter-spacing:.15em;">PICK 01</div>
+              <div style="font-family:'Gowun Batang',serif;font-weight:700;font-size:18px;margin-top:4px;">고등어 정식</div>
+              <div style="font-family:'Pretendard';font-size:10px;opacity:.8;margin-top:2px;">할매국시 · 30년 전통</div>
+            </div>
+            <div style="margin-top:8px;background:#f4ead3;border:1px dashed #3b6b3a;padding:12px;border-radius:4px;text-align:center;color:#3b6b3a;">
+              <div style="font-family:'DM Serif Display',serif;font-style:italic;font-size:10px;opacity:.6;letter-spacing:.15em;">PICK 02</div>
+              <div style="font-family:'Gowun Batang',serif;font-weight:700;font-size:16px;margin-top:4px;">김치찌개 백반</div>
+              <div style="font-family:'Pretendard';font-size:10px;opacity:.7;margin-top:2px;">엄마손 · 15년</div>
+            </div>
+            <div style="position:absolute;bottom:14px;left:14px;right:14px;background:#c85d3a;color:#f4ead3;text-align:center;padding:11px 0;border-radius:22px;font-family:'Gowun Batang',serif;font-weight:700;font-size:13px;">
+              한 그릇 부탁해요
+            </div>
+          </div>
+        </div>
+        <div class="caption" style="color:rgba(244,234,211,.75);border-color:rgba(244,234,211,.2);"><span>Home Screen</span><span>375 × 812</span></div>
+      </div>
+      <div class="panel" style="background:#3b6b3a;color:#f4ead3;position:relative;overflow:hidden;">
+        <div style="padding:32px;height:100%;display:flex;flex-direction:column;justify-content:space-between;min-height:280px;position:relative;z-index:2;">
+          <div style="display:flex;justify-content:space-between;font-family:'IBM Plex Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:.1em;opacity:.6;">
+            <span>Signboard Poster</span><span>A2 / Print</span>
+          </div>
+          <div>
+            <div style="font-family:'DM Serif Display',serif;font-style:italic;font-size:16px;color:#e8b23a;letter-spacing:.1em;margin-bottom:10px;">— since 2026 —</div>
+            <div style="font-family:'Gowun Batang',serif;font-weight:700;font-size:80px;line-height:.9;letter-spacing:-.03em;">
+              한끼<br>잘 먹고<br><span style="color:#e8b23a;">갑니다.</span>
+            </div>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-family:'Gowun Batang',serif;font-weight:700;font-size:13px;opacity:.85;">
+            <span>· 한끼픽 商會 ·</span><span>Table for one, please.</span>
+          </div>
+        </div>
+        <div style="position:absolute;top:20px;right:20px;width:80px;height:80px;border-radius:50%;border:1.5px dashed rgba(244,234,211,.4);display:flex;align-items:center;justify-content:center;font-family:'Gowun Batang',serif;font-weight:700;font-size:16px;color:#e8b23a;transform:rotate(-8deg);">
+          MENU<br>001
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========== FOOT ========== -->
+  <footer class="footnote">
+    <div>한끼픽 · Brand Identity Exploration · v0.1</div>
+    <div>4 Directions · 2026.09.21</div>
+  </footer>
+
+</body>
+</html>
