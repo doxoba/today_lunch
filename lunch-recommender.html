@@ -195,7 +195,7 @@
     transform:rotate(-1.5deg);
   }
   .cafeteria-menu-image{margin:0 0 16px;}
-  .cafeteria-menu-image img{width:100%; border-radius:var(--r-md); display:block; border:2px solid var(--ink);}
+  .cafeteria-menu-image img{width:100%; border-radius:var(--r-md); display:block; border:2px solid var(--ink); cursor:zoom-in;}
   .cafeteria-menu-note{font-size:10px; font-family:var(--f-mono); color:var(--text-faint); margin-top:6px;}
   .r-row-cafeteria-note{font-size:10px; font-family:var(--f-mono); color:var(--text-faint); margin-top:4px;}
   .other-label{font-size:11px; font-weight:500; font-family:var(--f-mono); text-transform:uppercase; letter-spacing:.06em; color:var(--text-faint); margin:0 0 6px;}
@@ -417,7 +417,13 @@
 
   /* ---- 댓글 사진 크게 보기(라이트박스) ---- */
   .lightbox-overlay{background:rgba(10,12,11,.85);}
-  .lightbox-img{max-width:min(90vw, 720px); max-height:85vh; border-radius:var(--r-md); border:2px solid #fff; cursor:zoom-out;}
+  .lightbox-img-wrap{position:relative; display:inline-block; max-width:min(90vw, 720px); max-height:85vh;}
+  .lightbox-img{display:block; max-width:min(90vw, 720px); max-height:85vh; border-radius:var(--r-md); border:2px solid #fff; cursor:zoom-out;}
+  .lightbox-watermark{
+    position:absolute; left:2px; right:2px; bottom:2px; background:rgba(10,12,11,.6); color:#fff;
+    font-family:var(--f-body); font-weight:700; font-size:14px; text-align:center; padding:8px 14px;
+    border-radius:0 0 calc(var(--r-md) - 2px) calc(var(--r-md) - 2px); pointer-events:none;
+  }
   .lightbox-close{
     position:fixed; top:18px; right:20px; color:#fff; background:var(--pink); border-radius:var(--r-pill);
     width:36px; height:36px; font-size:18px;
@@ -473,7 +479,10 @@
 
   <div class="modal-overlay lightbox-overlay" id="photoLightboxOverlay" hidden>
     <button class="modal-close lightbox-close" id="photoLightboxCloseBtn" type="button" aria-label="닫기"><i class="ph ph-x" aria-hidden="true"></i></button>
-    <img class="lightbox-img" id="photoLightboxImg" alt="사진 크게 보기">
+    <div class="lightbox-img-wrap">
+      <img class="lightbox-img" id="photoLightboxImg" alt="사진 크게 보기">
+      <div class="lightbox-watermark" id="photoLightboxWatermark" hidden></div>
+    </div>
   </div>
 
   <div class="panel" id="uploadPanel">
@@ -1853,6 +1862,7 @@
     var cafeteriaImageWrap = $('resultCafeteriaImage');
     if(r.cafeteriaMenuImage){
       $('resultCafeteriaImg').src = r.cafeteriaMenuImage.imageUrl;
+      $('resultCafeteriaImg').onclick = function(){ openPhotoLightbox(r.cafeteriaMenuImage.imageUrl, r.name); };
       $('resultCafeteriaNote').textContent = cafeteriaImageNote(r.cafeteriaMenuImage);
       cafeteriaImageWrap.hidden = false;
     } else {
@@ -1972,7 +1982,7 @@
       tileTop.style.backgroundImage = "url('" + r.cafeteriaMenuImage.imageUrl.replace(/'/g, '%27') + "')";
       tileTop.appendChild(el('div','r-tile-cui','오늘의 메뉴 사진'));
       tileTop.style.cursor = 'zoom-in';
-      tileTop.addEventListener('click', function(){ openPhotoLightbox(r.cafeteriaMenuImage.imageUrl); });
+      tileTop.addEventListener('click', function(){ openPhotoLightbox(r.cafeteriaMenuImage.imageUrl, r.name); });
     } else if(tilePhoto){
       tileTop.classList.add('has-photo');
       tileTop.style.backgroundImage = "url('" + tilePhoto.url.replace(/'/g, '%27') + "')";
@@ -2532,13 +2542,25 @@
   }
 
   // ---- 댓글 사진 크게 보기(라이트박스) ----
-  function openPhotoLightbox(url){
+  function todayShortDate(){
+    var d = new Date();
+    return (d.getMonth()+1) + '/' + d.getDate();
+  }
+  function openPhotoLightbox(url, watermarkName){
     $('photoLightboxImg').src = url;
+    var wm = $('photoLightboxWatermark');
+    if(watermarkName){
+      wm.textContent = watermarkName + ' · ' + todayShortDate();
+      wm.hidden = false;
+    } else {
+      wm.hidden = true;
+    }
     $('photoLightboxOverlay').hidden = false;
   }
   function closePhotoLightbox(){
     $('photoLightboxOverlay').hidden = true;
     $('photoLightboxImg').src = '';
+    $('photoLightboxWatermark').hidden = true;
   }
   function copyToClipboard(text){
     if(navigator.clipboard && navigator.clipboard.writeText){ return navigator.clipboard.writeText(text); }
