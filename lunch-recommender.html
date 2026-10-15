@@ -1922,6 +1922,14 @@
       body.appendChild(el('div','empty-state','아직 불러온 식당이 없어요.'));
       return;
     }
+    if(pendingListDeepLinkScroll){
+      pendingListDeepLinkScroll = false;
+      var listSection = $('listCategoryChips') && $('listCategoryChips').closest('details');
+      if(listSection){
+        listSection.open = true;
+        requestAnimationFrame(function(){ listSection.scrollIntoView({ behavior: 'smooth', block: 'start' }); });
+      }
+    }
     var query = state.menuSearchQuery.trim();
     var searching = query !== '';
     var listCategoryChips = $('listCategoryChips'), listCategoryHelp = $('listCategoryHelp'), searchNote = $('menuSearchNote');
@@ -3043,6 +3051,21 @@
     if(!placeId) return null;
     return { placeId: placeId, name: sp.get('name') || '(이름 없음)' };
   })();
+  // ---- 목록 딥링크 (?list=cafeteria 또는 ?list=<종류 이름>) ----
+  // Slack 알림의 "상세 정보 보기" 링크가 이 주소로 들어오면, 앱이 뜨자마자 "주변 식당 목록 · 정보
+  // 편집"을 해당 종류로 필터링하고 그 위치까지 스크롤해서 각 식당의 세부 정보·위치를 바로 볼 수
+  // 있게 한다. 상단 추천 조건과는 무관한 목록 전용 필터(state.listCategoryFilter)만 건드린다.
+  // 'cafeteria'는 한글 주소 인코딩 없이 쓰는 짧은 별칭이다.
+  var LIST_DEEP_LINK_ALIASES = { cafeteria: '구내식당/한식뷔페' };
+  function readListDeepLink(){
+    var value = new URLSearchParams(location.search).get('list');
+    if(!value) return null;
+    var resolved = LIST_DEEP_LINK_ALIASES[value] || value;
+    return CUISINE_OPTIONS.indexOf(resolved) !== -1 ? resolved : null;
+  }
+  // 딥링크로 들어왔을 때, 식당 목록이 처음 그려지는 시점에 한 번만 목록 위치로 스크롤한다.
+  var pendingListDeepLinkScroll = false;
+
   // 업로드 모드에서 선택된 사진 파일. "사진 찍기"/"사진 선택" 두 input 중 어느 쪽에서 골랐든
   // 여기 하나로 모아서 다룬다(카메라 촬영 vs 기존 사진 불러오기를 각 브라우저의 <input capture>
   // 처리 방식 차이 없이 명시적으로 구분해서 제공하기 위함).
@@ -3174,6 +3197,11 @@
       state.menuSearchQuery = '';
       renderList();
     });
+    var deepLinkListFilter = readListDeepLink();
+    if(deepLinkListFilter){
+      state.listCategoryFilter = deepLinkListFilter;
+      pendingListDeepLinkScroll = true;
+    }
     init();
 
     $('teamInviteBtn').addEventListener('click', onTeamInviteClick);

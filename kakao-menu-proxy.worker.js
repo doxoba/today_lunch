@@ -47,6 +47,29 @@ const CAFETERIA_POST_IMAGE_CACHE_SECONDS = 60 * 60; // 1시간
 // 채널ID를 추가해줘야 매일 9시에 미리 데워진다.
 const CAFETERIA_CHANNELS = ['_gdqxdn', '_NHxgEn', '_bXxkxhb', '_aKxdLs', '_tNIgn'];
 
+// "오늘의 메뉴가 올라오면 Slack으로 알림" 대상 식당(메리 확정, 2026-09-28). 위 CAFETERIA_CHANNELS(캐시
+// 예열용)와 달리 알림은 이 5곳만 대상이라 별도 목록으로 둔다(굿푸드가산·까사미아푸드는 거리가 멀거나
+// 대상이 아니라 제외). 새 식당을
+// 추가하려면 여기 한 줄만 추가하면 된다.
+//  - channelId가 있으면 카카오 채널(소식 글 / 프로필 사진)로 감지
+//  - weekly:true면 "정보 편집"에서 올린 주간 식단표(요일별 KV 사진)의 오늘 요일 칸으로 감지
+// placeId는 주간 식단표 KV 키와 앱의 식당 id가 쓰는 "kakao:" 접두사 포함 형태 그대로 적는다.
+const NOTIFY_TARGETS = [
+  { name: '씽씽푸드', placeId: 'kakao:1859748618', channelId: '_gdqxdn' },
+  { name: '바른식탁', placeId: 'kakao:62808198', channelId: '_bXxkxhb' },
+  { name: '윤스푸드', placeId: 'kakao:1708219595', channelId: '_aKxdLs' },
+  { name: '더소울푸드', placeId: 'kakao:2095872781', channelId: '_NHxgEn' },
+  { name: '돈토', placeId: 'kakao:11598876', weekly: true, manual: true },
+];
+// 컨펌 링크/주간 사진 URL이 가리킬 이 Worker의 공개 주소, 그리고 팀 채널 메시지에 넣을 앱 링크.
+const WORKER_BASE_URL = 'https://kakao-menu-proxy.01-06.workers.dev';
+const APP_URL = 'https://doxoba.github.io/today_lunch/lunch-recommender.html';
+// 예전부터 대시보드에 등록돼 있던 "매일 09:00 캐시 예열" cron 표현식. scheduled()가 이 값으로
+// 어떤 cron이 깨웠는지 구분한다(알림 폴링 cron과 같은 시각에 겹쳐 초안이 중복 생성되는 걸 막기 위함).
+const PREFETCH_CRON = '0 0 * * *';
+const NOTIFY_DRAFT_TTL_SECONDS = 60 * 60 * 12; // 컨펌 대기 초안 보관 시간
+const NOTIFY_APPROVE_DEADLINE_HOUR_KST = 13; // 점심시간(13시)이 되면 승인 불가(점심 지난 알림은 무의미)
+
 function corsHeaders() {
   return {
     'Access-Control-Allow-Origin': '*', // 필요시 배포 도메인으로 좁혀도 됨
@@ -157,6 +180,24 @@ export default {
     if (url.pathname === '/cafeteria/weekly-status' && request.method === 'GET') {
       return handleGetCafeteriaWeeklyStatus(url, env);
     }
+    // 주간 식단표/매일 직접 올린 사진은 KV에 base64로만 있어서 Slack 이미지 블록이 요구하는 공개
+    // URL이 없다 — 해당 사진을 이미지 바이트로 풀어서 내려주는 라우트(Slack 알림 전용). 경로가
+    // .jpg로 끝나야 한다 — 안 그러면 Slack이 "이미지 파일처럼 안 생겼다"며 image 블록 전체를
+    // invalid_blocks로 거부한다(2026-09-29 실사용 중 확인 — 카카오 CDN의 .jpg로 끝나는 주소만
+    // 쓰던 채널형 알림은 문제없었는데, 이 라우트가 섞이자마자 막 실패하기 시작해서 발견함).
+    if ((url.pathname === '/cafeteria/image' || url.pathname === '/cafeteria/image.jpg') && request.method === 'GET') {
+      return handleGetCafeteriaImage(url, env);
+    }
+    // 카카오 CDN 사진을 Slack이 직접 못 가져가는 문제 때문에 이 Worker가 대신 받아와 중계하는
+    // 라우트 (Slack 알림 전용, handleCafeteriaPhotoProxy 정의부 주석 참고).
+    if (url.pathname === '/cafeteria/photo.jpg' && request.method === 'GET') {
+      return handleCafeteriaPhotoProxy(url);
+    }
+
+    // Slack 알림 컨펌 링크. GET은 확인 페이지만 보여주고, 실제 발송/취소는 그 페이지의 버튼(POST)
+    // 으로만 일어난다(Slack이 링크 미리보기를 위해 GET으로 미리 열어도 자동 승인되지 않게).
+    if (url.pathname === '/notify/approve') return handleNotifyDecision(request, url, env, 'approve');
+    if (url.pathname === '/notify/cancel') return handleNotifyDecision(request, url, env, 'cancel');
 
     const placeId = url.searchParams.get('placeId');
 
@@ -247,8 +288,19 @@ export default {
   // Cloudflare 대시보드(Workers & Pages > 이 Worker > Settings > Triggers > Cron Triggers)에
   // "0 0 * * *"(UTC 0시 = KST 9시)를 등록해두면 이 함수가 매일 그 시각에 자동 실행된다.
   // 코드만으로는 cron 자체를 등록할 수 없어 대시보드(또는 wrangler.toml) 설정이 별도로 필요함.
+  //
+  // 알림용 폴링 cron("*/20 0-3 * * MON-FRI" = KST 평일 09:00~12:40, 20분마다)도 같은 방식으로 추가
+  // (요일을 숫자로 쓰면 안 된다 — Cloudflare cron은 1=일요일이라 "1-5"는 일~목이 됨)
+  // 등록한다. 두 cron이 09:00에 동시에 깨어나 같은 업데이트를 각각 초안으로 만들지 않도록, 예열
+  // cron은 예열만 / 그 외 cron은 감지·컨펌 요청만 맡는다(감지 과정에서 대상 채널 캐시도 갱신됨).
   async scheduled(event, env, ctx) {
-    ctx.waitUntil(prefetchCafeteriaMenus(env));
+    if (event.cron === PREFETCH_CRON) {
+      ctx.waitUntil(prefetchCafeteriaMenus(env));
+    } else {
+      ctx.waitUntil(
+        detectCafeteriaUpdates(env).catch((e) => console.error('[notify] 감지 실패', String(e)))
+      );
+    }
   },
 };
 
@@ -540,19 +592,535 @@ async function handleCafeteriaMenu(channelId, env) {
 // cron(scheduled)이 매일 09:00(KST)에 이 함수를 호출해 CAFETERIA_CHANNELS의 캐시를 미리
 // 데워둔다. 한 채널이 실패해도(폐업/구조변경 등) 나머지는 계속 진행하도록 allSettled를 쓴다.
 async function prefetchCafeteriaMenus(env) {
-  const cache = caches.default;
-  await Promise.allSettled(
-    CAFETERIA_CHANNELS.map(async (channelId) => {
-      const result = await fetchCafeteriaProfile(channelId);
-      if (!result) return;
-      const tracked = isCafeteriaPostSource(result.source) ? result : await applyCafeteriaChangeTracking(env, result);
-      const maxAge = isCafeteriaPostSource(tracked.source) ? CAFETERIA_POST_IMAGE_CACHE_SECONDS : CAFETERIA_IMAGE_CACHE_SECONDS;
-      const response = json(tracked, 200, {
-        'Cache-Control': `public, max-age=${maxAge}`,
-      });
-      await cache.put(cafeteriaCacheRequest(channelId), response);
-    })
+  await Promise.allSettled(CAFETERIA_CHANNELS.map((channelId) => refreshCafeteriaChannel(env, channelId)));
+}
+
+// 캐시를 우회해 카카오에서 채널을 새로 조회하고(변경 추적 포함) Cache API를 갱신한 뒤 그 결과를
+// 돌려준다. 실패하면 null. 예열 cron과 Slack 알림 폴링이 같이 쓴다 — 알림 폴링이 캐시도 함께
+// 갱신하므로 앱 화면에도 업데이트가 더 빨리 반영된다.
+async function refreshCafeteriaChannel(env, channelId) {
+  const result = await fetchCafeteriaProfile(channelId);
+  if (!result) return null;
+  const tracked = isCafeteriaPostSource(result.source) ? result : await applyCafeteriaChangeTracking(env, result);
+  const maxAge = isCafeteriaPostSource(tracked.source) ? CAFETERIA_POST_IMAGE_CACHE_SECONDS : CAFETERIA_IMAGE_CACHE_SECONDS;
+  const response = json(tracked, 200, {
+    'Cache-Control': `public, max-age=${maxAge}`,
+  });
+  await caches.default.put(cafeteriaCacheRequest(channelId), response);
+  return tracked;
+}
+
+// ============ 오늘의 메뉴 업데이트 → 메리 컨펌 → Slack 팀 채널 발송 ============
+// 흐름: 폴링 cron이 새 업데이트를 감지 → 그날의 누적 초안(KV notify-compile:)에 합쳐서 Webhook
+// (SLACK_WEBHOOK_APPROVAL, 메리 DM/비공개 채널)로 "지금까지 모인 전체" 미리보기+승인/취소 링크를
+// 보냄 → 메리가 링크의 확인 페이지에서 버튼을 눌러야만 실제 발송(sendTeamGallery). 자동 발송
+// 경로는 없다.
+//
+// 식당마다 사진/글이 올라오는 시각이 달라 폴링 주기(20분)마다 한둘씩만 새로 감지되는데, 그때마다
+// 바로바로 컨펌 요청을 보내면 팀 채널에도 식당별로 따로따로 나가게 된다(2026-09-29 실사용 중 확인).
+// 그래서 "그날 아직 결정되지 않은 전체 목록"을 notify-compile:{date}에 들고 있다가, 새 항목이
+// 생길 때마다 그 누적 목록 전체로 초안을 새로 만들어 다시 컨펌을 요청한다. Incoming Webhook은
+// 이미 보낸 Slack 메시지를 수정/삭제할 수 없으므로, 이전 초안은 "최신 메시지로 대체됨" 상태로
+// 표시만 해두고(눌러도 발송되지 않음) 실제로는 항상 가장 최근 컨펌 메시지만 유효하다. 메리가
+// 승인하거나 취소하면 그 시점의 누적 목록이 비워지고, 다음 새 항목부터 새로운 누적이 시작된다.
+//
+// 컨펌(메리에게만 보이는 미리보기)과 실제 팀 발송은 서로 다른 방식을 쓴다: 컨펌은 Block Kit
+// image 블록(세로로 하나씩)이라 항목마다 이름을 텍스트로 보여줄 수 있어 검토하기 편하고, 팀
+// 발송은 Slack 파일 업로드 API로 사진들을 한 메시지에 같이 올려 가로 스와이프 갤러리로 보이게
+// 한다(sendTeamGallery 정의부 참고, 2026-09-29 메리 요청).
+//
+// 필요한 Worker 설정: 시크릿 SLACK_WEBHOOK_APPROVAL(컨펌용) / SLACK_BOT_TOKEN(팀 발송용,
+// files:write 스코프) / APPROVE_SECRET, 변수 SLACK_TEAM_CHANNEL_ID(팀 채널 ID), (테스트용)
+// SLACK_DRY_RUN=1 — 이 값이면 Slack 전송/KV 기록 없이 감지 결과를 console.log만 한다.
+function notifyKey(placeId) { return 'notify:' + placeId; }
+function draftKey(id) { return 'notify-draft:' + id; }
+function compileKey(date) { return 'notify-compile:' + date; }
+// Slack 메시지에서 항상 NOTIFY_TARGETS 등록 순서대로 보이게 정렬한다(감지 순서는 폴링마다 달라짐).
+const NOTIFY_TARGET_ORDER = NOTIFY_TARGETS.map((t) => t.placeId);
+function sortCompileItems(items) {
+  return items.slice().sort((a, b) => NOTIFY_TARGET_ORDER.indexOf(a.placeId) - NOTIFY_TARGET_ORDER.indexOf(b.placeId));
+}
+
+function randomHex(byteLength) {
+  const bytes = crypto.getRandomValues(new Uint8Array(byteLength));
+  return Array.from(bytes).map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+// 승인/취소 링크 서명. action을 메시지에 넣어 "승인 링크의 sig로 취소" 같은 교차 사용을 막는다.
+async function signNotifyAction(secret, action, id) {
+  const key = await crypto.subtle.importKey(
+    'raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']
   );
+  const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(action + ':' + id));
+  return Array.from(new Uint8Array(sig)).map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+function timingSafeEqualStr(a, b) {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
+
+// "오늘 것으로 볼 시각인가" 공통 판정 — 소식 글(post-guess)과 프로필 사진 변경(profile) 둘 다에
+// 쓴다. 정확히 오늘이면 당연히 맞고, "전날 18시 이후"도 오늘자로 인정한다 — 바른식탁처럼 자정
+// 직전에 내일(=오늘) 메뉴 사진을 미리 올려두는 식당이 있어서(2026-09-29 실사용 중 확인), 프로필
+// 사진 쪽에도 이 예외가 없으면 자정을 넘기는 순간 "어제 바뀐 사진"으로 취급돼 오늘자 알림에서
+// 영영 빠지게 된다.
+function isTimestampForToday(ts, today) {
+  if (!ts) return false;
+  const postedDay = getKstDateString(ts);
+  if (postedDay === today) return true;
+  const yesterday = getKstDateString(Date.now() - 24 * 60 * 60 * 1000);
+  return postedDay === yesterday && new Date(ts + KST_OFFSET_MS).getUTCHours() >= 18;
+}
+
+// 한 대상의 "오늘 새로 올라온 메뉴"를 판정한다. 없거나 이미 초안에 담긴 시그니처면 null.
+async function detectTargetUpdate(env, target, today, weekday) {
+  let kind = null; // 'post' | 'post-guess' | 'profile' | 'weekly' | 'manual'
+  let signature = null;
+  let imageUrl = null;
+  let photoSource = null; // 팀 채널 갤러리 발송 때 이 Worker가 직접 사진 바이트를 구하는 방법
+  let note = null;
+
+  if (target.manual || target.weekly) {
+    // 돈토처럼 "정보 편집" 패널에서 매일 직접 올리는 사진(manual)과 주간 식단표(weekly)를 둘 다
+    // 켜둔 식당도 있다 — 그날그날 어느 쪽에 올렸는지 몰라도 되도록 매일 사진을 먼저 확인하고,
+    // 없으면 주간 식단표를 확인한다(2026-09-29 실사용 중 돈토가 매일 사진 쪽에만 올라와서 주간
+    // 식단표만 보던 기존 코드가 놓쳤던 걸 발견해 추가함).
+    if (target.manual) {
+      const raw = await env.REVIEWS.get(cafeteriaManualKey(target.placeId));
+      const record = raw ? JSON.parse(raw) : null;
+      if (record && record.date === today) {
+        kind = 'manual';
+        signature = 'manual|' + record.uploadedAt;
+        imageUrl = WORKER_BASE_URL + '/cafeteria/image.jpg?placeId=' + encodeURIComponent(target.placeId) +
+          '&manual=1&v=' + record.uploadedAt;
+        photoSource = { type: 'manual', placeId: target.placeId };
+      }
+    }
+    if (!kind && target.weekly) {
+      const raw = await env.REVIEWS.get(cafeteriaWeeklyKey(target.placeId, weekday));
+      const record = raw ? JSON.parse(raw) : null;
+      if (record && record.weekOf === getKstMondayDateString()) {
+        kind = 'weekly';
+        signature = 'weekly|' + record.uploadedAt;
+        imageUrl = WORKER_BASE_URL + '/cafeteria/image.jpg?placeId=' + encodeURIComponent(target.placeId) +
+          '&weekday=' + weekday + '&v=' + record.uploadedAt;
+        photoSource = { type: 'weekly', placeId: target.placeId, weekday };
+      }
+    }
+    if (!kind) return null;
+  } else {
+    const tracked = await refreshCafeteriaChannel(env, target.channelId);
+    if (!tracked) return null;
+    if (tracked.source === 'post') {
+      kind = 'post';
+      signature = 'post|' + tracked.postPublishedAt + '|' + tracked.postTitle;
+      note = tracked.postTitle;
+    } else if (tracked.source === 'post-guess') {
+      if (!isTimestampForToday(tracked.postPublishedAt, today)) return null;
+      kind = 'post-guess';
+      signature = 'post|' + tracked.postPublishedAt + '|' + tracked.postTitle;
+      note = tracked.postTitle;
+    } else if (tracked.source === 'profile') {
+      if (!isTimestampForToday(tracked.profileUpdatedAt, today)) return null;
+      kind = 'profile';
+      signature = 'profile|' + tracked.imageId;
+    } else {
+      return null;
+    }
+    // 컨펌 메시지는 Slack이 직접 이 주소를 가져가므로 이 Worker가 중계한 주소로 바꿔서 넣어야
+    // 하지만(buildNotifyImageProxyUrl 정의부 주석 참고), 팀 채널 갤러리는 이 Worker가 직접 카카오
+    // CDN에서 바이트를 받아 Slack에 업로드하므로(sendTeamGallery) 원본 주소를 그대로 쓴다 — 이
+    // Worker가 자기 자신의 주소를 다시 호출하는 경로(hairpin)가 이따금 불안정해서(2026-09-29
+    // 실사용 중 확인, 같은 프록시 URL을 외부에서 직접 부르면 200인데 Worker 내부에서 fetch하면
+    // 404가 나는 경우가 있었음) 굳이 거치지 않는다.
+    imageUrl = buildNotifyImageProxyUrl(tracked.imageUrl);
+    photoSource = { type: 'url', url: tracked.imageUrl };
+  }
+
+  const prevRaw = await env.REVIEWS.get(notifyKey(target.placeId));
+  const prev = prevRaw ? JSON.parse(prevRaw) : null;
+  const sameDay = !!(prev && prev.date === today);
+  if (sameDay && prev.signature === signature) return null; // 이미 초안에 담았거나 취소한 건
+  const label = { post: '확정', 'post-guess': '추정', profile: '사진 변경 확인', weekly: '주간 식단표', manual: '오늘 사진' }[kind];
+  return {
+    placeId: target.placeId, name: target.name, label, revised: sameDay, // 같은 날 시그니처가 바뀜 = 재편집
+    signature, imageUrl, photoSource, note,
+  };
+}
+
+async function detectCafeteriaUpdates(env) {
+  const weekday = getKstWeekdayKey();
+  if (CAFETERIA_WEEKDAYS.indexOf(weekday) === -1) return; // 주말은 알림 없음
+  if (!env.REVIEWS) return;
+  const dryRun = env.SLACK_DRY_RUN === '1';
+  if (!dryRun && !(env.APPROVE_SECRET && env.SLACK_WEBHOOK_APPROVAL && env.SLACK_BOT_TOKEN && env.SLACK_TEAM_CHANNEL_ID)) {
+    console.warn('[notify] APPROVE_SECRET / SLACK_WEBHOOK_APPROVAL / SLACK_BOT_TOKEN / SLACK_TEAM_CHANNEL_ID 중 미설정이 있어 건너뜁니다.');
+    return;
+  }
+
+  const today = getKstDateString();
+  const settled = await Promise.allSettled(
+    NOTIFY_TARGETS.map((target) => detectTargetUpdate(env, target, today, weekday))
+  );
+  const updates = [];
+  settled.forEach((r, i) => {
+    if (r.status === 'fulfilled') { if (r.value) updates.push(r.value); }
+    else console.error('[notify] ' + NOTIFY_TARGETS[i].name + ' 감지 실패', String(r.reason));
+  });
+  if (!updates.length) return;
+
+  if (dryRun) {
+    console.log('[notify dry-run] 새 업데이트 ' + updates.length + '건', JSON.stringify(updates));
+    return;
+  }
+  await mergeUpdatesAndAskApproval(env, updates, today);
+}
+
+// 새로 감지된 것들을 그날의 누적 목록(notify-compile:{date})에 합치고, 그 전체 목록으로 초안을
+// 새로 만들어 메리에게 컨펌을 요청한다. 시그니처는 Webhook A 전송이 성공한 뒤에만 기록해서,
+// 전송이 실패하면(compile도 아직 저장 전이라) 다음 폴링에서 이번 업데이트가 그대로 다시 시도된다.
+async function mergeUpdatesAndAskApproval(env, updates, today) {
+  const compileRaw = await env.REVIEWS.get(compileKey(today));
+  const compile = compileRaw ? JSON.parse(compileRaw) : { date: today, items: [], activeDraftId: null };
+  updates.forEach((u) => {
+    const item = { placeId: u.placeId, name: u.name, label: u.label, revised: u.revised, imageUrl: u.imageUrl, photoSource: u.photoSource, note: u.note, signature: u.signature };
+    const idx = compile.items.findIndex((it) => it.placeId === u.placeId);
+    if (idx >= 0) compile.items[idx] = item; else compile.items.push(item);
+  });
+  compile.items = sortCompileItems(compile.items);
+
+  const id = randomHex(12);
+  // 승인 마감은 그날 13:00 KST. 폴링 cron은 그 전에 끝나지만, 늦은 시각에 수동 실행한 테스트도
+  // 동작하도록 이미 지났으면 1시간 뒤로 잡는다.
+  const deadline = Date.parse(today + 'T' + String(NOTIFY_APPROVE_DEADLINE_HOUR_KST).padStart(2, '0') + ':00:00+09:00');
+  const draft = {
+    id, date: today, status: 'pending', createdAt: Date.now(),
+    expiresAt: deadline > Date.now() ? deadline : Date.now() + 60 * 60 * 1000,
+    items: compile.items,
+  };
+  await env.REVIEWS.put(draftKey(id), JSON.stringify(draft), { expirationTtl: NOTIFY_DRAFT_TTL_SECONDS });
+
+  const approveUrl = await buildDecisionUrl(env, 'approve', id);
+  const cancelUrl = await buildDecisionUrl(env, 'cancel', id);
+  // 새 컨펌 메시지가 실제로 Slack에 도착한 게 확인된 뒤에만(성공한 뒤에만) 이전 초안을 "대체됨"으로
+  // 바꾼다 — 순서를 반대로 하면(먼저 대체, 나중에 전송 시도) 전송이 실패했을 때 아직 화면에 남아
+  // 있는 유일한(이전) 메시지가 대체됨으로 표시되고 새 메시지는 아무도 못 받는 상태가 된다
+  // (2026-09-29 실사용 중 발견 — 대체 처리는 반드시 전송 성공 다음에 와야 함).
+  try {
+    await postSlack(env.SLACK_WEBHOOK_APPROVAL, buildApprovalMessage(draft, approveUrl, cancelUrl));
+  } catch (e) {
+    await env.REVIEWS.delete(draftKey(id)); // 링크가 아무에게도 안 갔으니 이번 초안만 정리(compile은 그대로 둬서 다음 폴링이 재시도, 이전 초안도 그대로 유효하게 남음)
+    throw e;
+  }
+
+  if (compile.activeDraftId && compile.activeDraftId !== id) {
+    const prevRaw = await env.REVIEWS.get(draftKey(compile.activeDraftId));
+    const prevDraft = prevRaw ? JSON.parse(prevRaw) : null;
+    if (prevDraft && prevDraft.status === 'pending') {
+      prevDraft.status = 'superseded';
+      await env.REVIEWS.put(draftKey(prevDraft.id), JSON.stringify(prevDraft), { expirationTtl: NOTIFY_DRAFT_TTL_SECONDS });
+    }
+  }
+
+  compile.activeDraftId = id;
+  await env.REVIEWS.put(compileKey(today), JSON.stringify(compile), { expirationTtl: 60 * 60 * 14 });
+  await Promise.all(
+    updates.map((u) =>
+      env.REVIEWS.put(notifyKey(u.placeId), JSON.stringify({ date: today, signature: u.signature }), { expirationTtl: 60 * 60 * 48 })
+    )
+  );
+}
+
+// 초안이 발송/취소/만료 등 최종 상태가 됐을 때, 그 초안이 그날 누적 목록의 "현재 활성 초안"이었다면
+// 누적 목록을 비운다 — 그래야 다음에 새로 올라오는 식당부터 새 누적이 시작된다(이미 보낸/취소한
+// 식당이 다음 컨펌 요청에 다시 섞여 들어가지 않도록).
+async function clearCompileIfActive(env, draft) {
+  const raw = await env.REVIEWS.get(compileKey(draft.date));
+  if (!raw) return;
+  const compile = JSON.parse(raw);
+  if (compile.activeDraftId === draft.id) await env.REVIEWS.delete(compileKey(draft.date));
+}
+
+async function buildDecisionUrl(env, action, id) {
+  const sig = await signNotifyAction(env.APPROVE_SECRET, action, id);
+  return WORKER_BASE_URL + '/notify/' + action + '?id=' + id + '&sig=' + sig;
+}
+
+async function postSlack(webhookUrl, payload) {
+  const resp = await fetch(webhookUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!resp.ok) {
+    // Slack은 실패 이유를 상태 코드가 아니라 응답 본문(예: invalid_blocks, channel_not_found)에
+    // 담아 보낸다. 본문 없이 상태 코드만 남기면 매번 수동으로 curl을 쳐가며 원인을 추측해야
+    // 해서(2026-09-29 실사용 중 겪음), 로그에서 바로 원인을 알 수 있게 본문도 같이 남긴다.
+    const bodyText = await resp.text().catch(() => '');
+    throw new Error('Slack webhook status ' + resp.status + (bodyText ? ' - ' + bodyText : ''));
+  }
+}
+
+// 초안 항목 → Slack Block Kit. 컨펌 미리보기와 실제 발송본이 같은 블록을 쓴다.
+function draftItemBlocks(draft) {
+  const blocks = [];
+  draft.items.forEach((it) => {
+    const tag = it.label + (it.revised ? ' · 수정됨' : '');
+    blocks.push({ type: 'section', text: { type: 'mrkdwn', text: '*' + it.name + '*  `' + tag + '`' + (it.note ? '\n' + it.note : '') } });
+    blocks.push({ type: 'image', image_url: it.imageUrl, alt_text: it.name + ' 오늘의 메뉴' });
+  });
+  return blocks;
+}
+// 팀 채널에는 Block Kit image 블록(세로로 하나씩만 쌓임) 대신 Slack 파일 업로드 API로 사진들을
+// 한 메시지에 함께 올려서, Slack이 자동으로 만들어주는 가로 스와이프 갤러리로 보이게 한다
+// (2026-09-29 메리 요청 — 세로로 길게 늘어지는 대신 가로로 넘겨보고 싶다고 함). Incoming
+// Webhook은 파일을 못 올리므로 이 경로만 Bot Token(SLACK_BOT_TOKEN, files:write 권한)을 쓴다.
+// 상점명은 각 사진의 title로 넣어 Slack에서 마우스 오버/클릭 시 보이게 한다.
+async function slackApiForm(token, method, params) {
+  const resp = await fetch('https://slack.com/api/' + method, {
+    method: 'POST',
+    headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams(params).toString(),
+  });
+  const data = await resp.json().catch(() => null);
+  if (!data || data.ok !== true) {
+    throw new Error('Slack API ' + method + ' 실패: ' + (data && data.error ? data.error : 'status ' + resp.status));
+  }
+  return data;
+}
+async function slackApiJson(token, method, body) {
+  const resp = await fetch('https://slack.com/api/' + method, {
+    method: 'POST',
+    headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json; charset=utf-8' },
+    body: JSON.stringify(body),
+  });
+  const data = await resp.json().catch(() => null);
+  if (!data || data.ok !== true) {
+    throw new Error('Slack API ' + method + ' 실패: ' + (data && data.error ? data.error : 'status ' + resp.status));
+  }
+  return data;
+}
+// data: URL(base64) 형태로 KV에 저장된 사진을 이미지 바이트로 푼다. handleGetCafeteriaImage와
+// getNotifyPhotoBytes가 같이 쓴다.
+function decodeDataUrlPhoto(photo) {
+  const m = /^data:(image\/(?:jpeg|png|webp));base64,(.+)$/.exec(photo || '');
+  if (!m) throw new Error('지원하지 않는 이미지 형식입니다.');
+  const bin = atob(m[2]);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return { bytes: bytes.buffer, contentType: m[1] };
+}
+
+// 팀 채널 갤러리 발송용 사진 바이트를 photoSource(detectTargetUpdate가 남겨둔 값)로 직접
+// 구한다 — 이 Worker가 자기 자신의 주소를 다시 호출하지 않는다(sendTeamGallery 정의부 주석 참고).
+async function getNotifyPhotoBytes(env, source) {
+  if (!source) throw new Error('photoSource가 없습니다.');
+  if (source.type === 'url') {
+    const resp = await fetch(source.url);
+    if (!resp.ok) throw new Error('원본 이미지 상태 ' + resp.status);
+    return { bytes: await resp.arrayBuffer(), contentType: resp.headers.get('content-type') || 'image/jpeg' };
+  }
+  if (source.type === 'manual' || source.type === 'weekly') {
+    const key = source.type === 'manual'
+      ? cafeteriaManualKey(source.placeId)
+      : cafeteriaWeeklyKey(source.placeId, source.weekday);
+    const raw = await env.REVIEWS.get(key);
+    const record = raw ? JSON.parse(raw) : null;
+    if (!record) throw new Error('사진 기록을 찾을 수 없습니다.');
+    return decodeDataUrlPhoto(record.photo);
+  }
+  throw new Error('알 수 없는 photoSource 형식입니다.');
+}
+
+async function sendTeamGallery(env, draft) {
+  const token = env.SLACK_BOT_TOKEN;
+  const files = [];
+  for (const it of draft.items) {
+    let bytes, contentType;
+    try {
+      ({ bytes, contentType } = await getNotifyPhotoBytes(env, it.photoSource));
+    } catch (e) {
+      throw new Error(it.name + ' 사진을 못 가져왔습니다 (' + String(e && e.message || e) + ')');
+    }
+    const filename = (it.name || 'menu').replace(/[^0-9A-Za-z가-힣._-]/g, '_') + '.jpg';
+
+    const urlInfo = await slackApiForm(token, 'files.getUploadURLExternal', { filename, length: String(bytes.byteLength) });
+    const form = new FormData();
+    form.append('file', new Blob([bytes], { type: contentType }), filename);
+    const uploadResp = await fetch(urlInfo.upload_url, { method: 'POST', body: form });
+    if (!uploadResp.ok) throw new Error(it.name + ' 사진 업로드 실패 (status ' + uploadResp.status + ')');
+
+    files.push({ id: urlInfo.file_id, title: it.name });
+  }
+
+  await slackApiJson(token, 'files.completeUploadExternal', {
+    files,
+    channel_id: env.SLACK_TEAM_CHANNEL_ID,
+    // "상세 정보 보기" 링크는 앱을 열어 목록을 구내식당/한식뷔페로 필터링한 채 그 위치로
+    // 스크롤해준다(lunch-recommender.html의 ?list=cafeteria 딥링크 처리 참고).
+    initial_comment: ':bento: 오늘의 메뉴 (' + draft.date + ')\n마우스 오버 시 상점명 확인 가능합니다.\n' +
+      ':round_pushpin: <' + APP_URL + '?list=cafeteria|상세 정보 보기> (식당 위치·세부 정보)',
+  });
+}
+function buildApprovalMessage(draft, approveUrl, cancelUrl) {
+  const until = String(NOTIFY_APPROVE_DEADLINE_HOUR_KST) + ':00';
+  return {
+    text: '[컨펌 요청] 오늘의 메뉴 ' + draft.items.length + '곳 — 팀 채널로 보낼까요?',
+    blocks: [
+      { type: 'section', text: { type: 'mrkdwn', text: '🔔 *[컨펌 요청]* 아래 내용을 팀 채널에 보낼까요?\n_링크를 눌러 확인 페이지에서 버튼을 눌러야만 발송됩니다._' } },
+      { type: 'divider' },
+      ...draftItemBlocks(draft),
+      { type: 'divider' },
+      { type: 'section', text: { type: 'mrkdwn', text: '<' + approveUrl + '|✅ 발송 확인 페이지 열기>     <' + cancelUrl + '|🚫 발송 안 함>' } },
+      { type: 'context', elements: [{ type: 'mrkdwn', text: '오늘 ' + until + '(KST) 이후엔 승인할 수 없어요.' }] },
+    ],
+  };
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+function htmlPage(title, bodyHtml, status = 200) {
+  const page = '<!doctype html><html lang="ko"><head><meta charset="utf-8">' +
+    '<meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex">' +
+    '<title>' + escapeHtml(title) + '</title>' +
+    '<style>body{font-family:system-ui,-apple-system,"Malgun Gothic",sans-serif;max-width:560px;margin:0 auto;padding:20px;line-height:1.5}' +
+    'img{max-width:100%;border-radius:8px;margin:4px 0 12px}.tag{font-size:12px;background:#eee;border-radius:4px;padding:1px 6px}' +
+    'button{font-size:16px;padding:12px 20px;border:0;border-radius:8px;background:#2e7d32;color:#fff;cursor:pointer}' +
+    'button.cancel{background:#c62828}</style></head><body>' + bodyHtml + '</body></html>';
+  return new Response(page, {
+    status,
+    headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer' },
+  });
+}
+
+async function handleNotifyDecision(request, url, env, action) {
+  if (request.method !== 'GET' && request.method !== 'POST') return htmlPage('허용되지 않는 요청', '<p>허용되지 않는 요청입니다.</p>', 405);
+  if (!env.REVIEWS || !env.APPROVE_SECRET) return htmlPage('설정 오류', '<p>Worker 설정(KV/APPROVE_SECRET)이 없습니다.</p>', 500);
+
+  const id = url.searchParams.get('id') || '';
+  const sig = url.searchParams.get('sig') || '';
+  const expected = /^[0-9a-f]{24}$/.test(id) ? await signNotifyAction(env.APPROVE_SECRET, action, id) : '';
+  if (!expected || !timingSafeEqualStr(expected, sig)) return htmlPage('잘못된 링크', '<p>링크가 올바르지 않습니다.</p>', 403);
+
+  const raw = await env.REVIEWS.get(draftKey(id));
+  if (!raw) return htmlPage('만료된 요청', '<p>만료되었거나 존재하지 않는 요청입니다.</p>', 404);
+  const draft = JSON.parse(raw);
+  const expired = Date.now() > draft.expiresAt;
+  const preview = draft.items.map((it) =>
+    '<p><b>' + escapeHtml(it.name) + '</b> <span class="tag">' + escapeHtml(it.label + (it.revised ? ' · 수정됨' : '')) + '</span>' +
+    (it.note ? '<br>' + escapeHtml(it.note) : '') + '<br><img src="' + escapeHtml(it.imageUrl) + '" referrerpolicy="no-referrer" alt=""></p>'
+  ).join('');
+  const verb = action === 'approve' ? '팀 채널로 발송' : '발송 안 함';
+
+  if (draft.status !== 'pending') {
+    const done = {
+      sent: '이미 팀 채널로 발송됐어요.',
+      cancelled: '이미 취소됐어요.',
+      expired: '만료됐어요.',
+      superseded: '그 사이 새 식당이 감지돼서 더 최신 컨펌 메시지로 대체됐어요. Slack에서 최신 메시지의 링크를 확인해 주세요.',
+    }[draft.status] || '이미 처리됐어요.';
+    return htmlPage('처리 완료', '<h2>' + done + '</h2>' + preview);
+  }
+  if (expired) {
+    draft.status = 'expired';
+    await env.REVIEWS.put(draftKey(id), JSON.stringify(draft), { expirationTtl: NOTIFY_DRAFT_TTL_SECONDS });
+    await clearCompileIfActive(env, draft);
+    return htmlPage('만료됨', '<h2>승인 가능 시간이 지났어요.</h2><p>발송되지 않았습니다.</p>' + preview, 410);
+  }
+
+  if (request.method === 'GET') {
+    return htmlPage('발송 확인',
+      '<h2>' + (action === 'approve' ? '팀 채널에 아래 내용을 보낼까요?' : '이번 알림을 보내지 않을까요?') + '</h2>' + preview +
+      '<form method="POST" action="' + escapeHtml(url.pathname + url.search) + '"><button class="' + action + '">' + verb + '</button></form>');
+  }
+
+  // POST: 더블클릭/재요청에 대비해 상태를 먼저 바꿔 저장한 뒤 발송하고, 발송이 실패하면 pending으로 되돌린다.
+  draft.status = action === 'approve' ? 'sent' : 'cancelled';
+  draft.decidedAt = Date.now();
+  await env.REVIEWS.put(draftKey(id), JSON.stringify(draft), { expirationTtl: NOTIFY_DRAFT_TTL_SECONDS });
+  if (action === 'approve') {
+    try {
+      await sendTeamGallery(env, draft);
+    } catch (e) {
+      draft.status = 'pending';
+      delete draft.decidedAt;
+      await env.REVIEWS.put(draftKey(id), JSON.stringify(draft), { expirationTtl: NOTIFY_DRAFT_TTL_SECONDS });
+      console.error('[notify] 팀 채널 갤러리 발송 실패', String(e));
+      return htmlPage('발송 실패', '<h2>Slack 발송에 실패했어요.</h2><p>잠시 뒤 이 페이지를 새로고침해서 다시 시도해 주세요.</p>', 502);
+    }
+    await clearCompileIfActive(env, draft);
+    return htmlPage('발송 완료', '<h2>✅ 팀 채널로 발송했어요.</h2>' + preview);
+  }
+  await clearCompileIfActive(env, draft);
+  return htmlPage('취소 완료', '<h2>🚫 발송하지 않기로 했어요.</h2>' + preview);
+}
+
+// 주간 식단표 KV 사진(base64 data URL)을 이미지 바이트로 내려준다. URL의 v=uploadedAt가 사진이
+// 바뀔 때마다 달라지므로 길게 캐시해도 안전하다.
+async function handleGetCafeteriaImage(url, env) {
+  if (!env.REVIEWS) return json({ error: 'REVIEWS KV 바인딩이 설정되지 않았습니다.' }, 500);
+  const placeId = (url.searchParams.get('placeId') || '').trim();
+  const weekday = url.searchParams.get('weekday') || '';
+  const manual = url.searchParams.get('manual') === '1';
+  if (!placeId || (!manual && CAFETERIA_WEEKDAYS.indexOf(weekday) === -1)) {
+    return json({ error: 'placeId와 weekday(mon~fri) 또는 manual=1이 필요합니다.' }, 400);
+  }
+  let record;
+  if (manual) {
+    const raw = await env.REVIEWS.get(cafeteriaManualKey(placeId));
+    record = raw ? JSON.parse(raw) : null;
+    if (!record || record.date !== getKstDateString()) return json({ found: false }, 404);
+  } else {
+    const raw = await env.REVIEWS.get(cafeteriaWeeklyKey(placeId, weekday));
+    record = raw ? JSON.parse(raw) : null;
+    if (!record || record.weekOf !== getKstMondayDateString()) return json({ found: false }, 404);
+  }
+  let decoded;
+  try {
+    decoded = decodeDataUrlPhoto(record.photo);
+  } catch (e) {
+    return json({ error: String(e && e.message || e) }, 415);
+  }
+  return new Response(decoded.bytes, {
+    headers: { 'Content-Type': decoded.contentType, 'Cache-Control': 'public, max-age=86400', ...corsHeaders() },
+  });
+}
+
+// Slack 알림에 쓰는 카카오 CDN 원본 사진 URL을 그대로 image 블록에 넣으면 Slack이 그 사진을
+// 받아오는 데 실패해 메시지 전체가 invalid_blocks로 거부됐다(2026-09-29 실사용 중 확인 — 같은
+// URL을 우리 쪽/curl에서 직접 받으면 200으로 잘 오는데, Slack 쪽에서 시도할 때만 계속 실패해서
+// 카카오가 Slack이 쓰는 서버 IP 대역을 막고 있는 것으로 보임). 헤더를 바꿔서 될 일이 아니라서,
+// 이 Worker가 대신 사진을 받아와 중계한다 — 돈토의 자체 호스팅 사진은 같은 테스트에서 문제없이
+// 통과했던 것과 같은 원리. 열린 프록시가 되지 않도록 카카오 CDN 호스트만 허용한다.
+const NOTIFY_IMAGE_PROXY_ALLOWED_HOSTS = ['k.kakaocdn.net', 't1.kakaocdn.net'];
+function buildNotifyImageProxyUrl(originalUrl) {
+  return WORKER_BASE_URL + '/cafeteria/photo.jpg?src=' + encodeURIComponent(originalUrl);
+}
+async function handleCafeteriaPhotoProxy(url) {
+  const src = url.searchParams.get('src') || '';
+  let parsed;
+  try {
+    parsed = new URL(src);
+  } catch (e) {
+    return json({ error: 'src가 올바른 URL이 아닙니다.' }, 400);
+  }
+  if (parsed.protocol !== 'https:' || NOTIFY_IMAGE_PROXY_ALLOWED_HOSTS.indexOf(parsed.hostname) === -1) {
+    return json({ error: '허용되지 않은 이미지 호스트입니다.' }, 400);
+  }
+  let resp;
+  try {
+    resp = await fetch(parsed.toString());
+  } catch (e) {
+    return json({ error: '원본 이미지를 가져오지 못했습니다.' }, 502);
+  }
+  if (!resp.ok) return json({ error: '원본 이미지 응답 오류', status: resp.status }, 502);
+  const contentType = resp.headers.get('content-type') || 'image/jpeg';
+  return new Response(resp.body, {
+    headers: { 'Content-Type': contentType, 'Cache-Control': 'public, max-age=3600', ...corsHeaders() },
+  });
 }
 
 // ============ "우리 오늘 뭐먹지" 팀 모드 (Cloudflare KV) ============
