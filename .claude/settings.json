@@ -51,7 +51,12 @@
       "Bash(git log *)",
       "Bash(git pull *)",
       "Bash(node --check kakao-menu-proxy.worker.js)",
-      "WebFetch(domain:doxoba.github.io)"
+      "WebFetch(domain:doxoba.github.io)",
+      "Read(//c/workspaces/vibecoding - 복사본/**)",
+      "Bash(node -e \"require\\('playwright'\\); console.log\\('playwright OK'\\)\")"
+    ],
+    "additionalDirectories": [
+      "C:\\workspaces\\vibecoding - 복사본"
     ]
   }
 }
