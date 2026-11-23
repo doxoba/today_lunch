@@ -219,6 +219,53 @@
   .btn-outline{background:transparent; color:var(--ink);}
   .btn-outline:hover{background:var(--accent); color:var(--ink);}
 
+  /* ---- 점심/저녁 모드 토글 + 저녁(+반주) 화면 ---- */
+  .header-right{display:flex; flex-direction:column; align-items:flex-end; gap:10px;}
+  .mode-toggle{display:inline-flex; border:2px solid var(--ink); border-radius:var(--r-pill); overflow:hidden; background:#fff;}
+  .mode-btn{
+    display:inline-flex; align-items:center; gap:6px; border:none; background:#fff; color:var(--ink);
+    font-family:var(--f-sub); font-size:15px; padding:8px 18px; cursor:pointer; transition:background .12s, color .12s;
+  }
+  .mode-btn + .mode-btn{border-left:2px solid var(--ink);}
+  .mode-btn.active{background:var(--ink); color:var(--accent);}
+  .mode-btn:not(.active):hover{background:var(--accent-tint);}
+  .dinner-section{margin-bottom:20px;}
+  .dinner-section[hidden]{display:none;}
+  body.dinner-mode #board, body.dinner-mode details.accordion, body.dinner-mode #teamPanel{display:none;}
+  .dinner-filters{margin-bottom:20px;}
+  .dinner-picks{display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:20px; align-items:stretch;}
+  .dinner-empty{
+    grid-column:1/-1; background:var(--surface); border:2px dashed var(--border); border-radius:var(--r-lg);
+    padding:28px; text-align:center; color:var(--text-muted); font-family:var(--f-body); font-size:14px;
+  }
+  .dinner-card{
+    background:var(--surface); border:2px solid var(--ink); border-radius:var(--r-lg); box-shadow:5px 5px 0 var(--ink);
+    display:flex; flex-direction:column; overflow:hidden; animation:resultIn .15s ease-out;
+  }
+  .dinner-card-photo{width:100%; height:150px; object-fit:cover; display:block; border-bottom:2px solid var(--ink); background:var(--accent-tint);}
+  .dinner-card-photo-ph{
+    height:90px; display:flex; align-items:center; justify-content:center; border-bottom:2px solid var(--ink);
+    background:var(--accent-tint); font-size:34px; color:var(--ink);
+  }
+  .dinner-card-body{padding:18px; display:flex; flex-direction:column; gap:10px; flex:1;}
+  .dinner-card-name{font-family:var(--f-display); font-size:26px; line-height:1.15; margin:0; color:var(--text);}
+  .dinner-card-meta{font-size:12px; font-family:var(--f-mono); color:var(--text-muted); margin:0;}
+  .dinner-card-reason{font-family:var(--f-sub); font-size:15px; color:var(--ink); margin:0;}
+  .dinner-badges{display:flex; flex-wrap:wrap; gap:6px;}
+  .dn-badge{
+    font-family:var(--f-sub); font-size:12px; padding:3px 10px; border-radius:var(--r-pill);
+    border:2px solid var(--ink); background:#fff; color:var(--ink);
+  }
+  .dn-badge.pink{background:var(--pink); border-color:var(--pink); color:#fff;}
+  .dn-badge.lime{background:var(--accent);}
+  .dinner-menu{font-size:14px; font-family:var(--f-body); color:var(--text-body); line-height:1.7; margin:0;}
+  .dinner-card-actions{display:flex; flex-wrap:wrap; gap:8px; margin-top:auto; padding-top:6px;}
+  .dinner-card-actions .btn{flex:1 1 110px; white-space:normal; font-size:13px;}
+  @media (max-width:480px){
+    .header-right{align-items:flex-start;}
+    .dinner-card-name{font-size:23px;}
+  }
+
   /* ---- 지도 패널 ---- */
   .panel-map{padding:16px; display:flex; flex-direction:column;}
   #map{flex:1; min-height:220px; border-radius:var(--r-md); background:#f4f6f5; border:2px solid var(--ink);}
@@ -512,8 +559,49 @@
 
   <header class="page-header">
     <h1 class="page-title"><span class="stamp-top">TODAY'S</span><span class="stamp-main">한끼<span class="pop">픽!</span></span></h1>
-    <div class="rail-pill"><i class="ph ph-map-pin" aria-hidden="true"></i><span id="pageSub">강의장 인근 반경 300m 내 · 철길 건너 제외</span></div>
+    <div class="header-right">
+      <div class="mode-toggle" id="modeToggle" role="group" aria-label="식사 시간대">
+        <button type="button" class="mode-btn active" data-mode="lunch" aria-pressed="true"><i class="ph ph-sun" aria-hidden="true"></i>점심</button>
+        <button type="button" class="mode-btn" data-mode="dinner" aria-pressed="false"><i class="ph ph-moon-stars" aria-hidden="true"></i>저녁·반주</button>
+      </div>
+      <div class="rail-pill"><i class="ph ph-map-pin" aria-hidden="true"></i><span id="pageSub">강의장 인근 반경 300m 내 · 철길 건너 제외</span></div>
+    </div>
   </header>
+
+  <!-- 저녁(+반주) 모드: 점심 로직과 완전히 분리된 별도 화면. 점심 UI(#board, 목록, 팀 패널)는
+       body.dinner-mode일 때 CSS로 숨기기만 하고 코드/상태는 건드리지 않는다. -->
+  <section class="dinner-section" id="dinnerSection" hidden>
+    <div class="panel panel-filters dinner-filters">
+      <div class="section-label">저녁 · 반주 — 오늘 어떤 자리예요?</div>
+      <div class="filter-group">
+        <div class="group-label">인원</div>
+        <div class="chips" id="dn-chips-party"></div>
+      </div>
+      <div class="filter-group">
+        <div class="group-label">분위기</div>
+        <div class="chips" id="dn-chips-vibe"></div>
+      </div>
+      <div class="filter-group">
+        <div class="group-label">술</div>
+        <div class="chips" id="dn-chips-drink"></div>
+      </div>
+      <div class="filter-group">
+        <div class="group-label">가격대 (참고용 · 후보를 빼지는 않고 비슷한 곳을 먼저 보여줘요)</div>
+        <div class="chips" id="dn-chips-price"></div>
+      </div>
+      <div class="filter-group">
+        <div class="group-label">반경 (가산디지털단지역 기준 · 바꾸면 다시 검색해요)</div>
+        <div class="chips" id="dn-chips-radius"></div>
+      </div>
+      <div class="filter-foot">
+        <button class="reset-link" id="dnReset" type="button">조건 초기화</button>
+        <button class="cta" id="dnPickBtn" type="button">저녁 3곳 골라줘!</button>
+        <p class="cta-help" id="dnHelp" hidden></p>
+        <p class="cta-help" id="dnHistoryNote"></p>
+      </div>
+    </div>
+    <div class="dinner-picks" id="dnPicks"></div>
+  </section>
 
   <div class="board" id="board">
 
@@ -3006,6 +3094,549 @@
     }).catch(function(err){ showAlert('추천 결과 저장에 실패했어요: ' + err.message); });
   }
 
+  // ============ 저녁(+반주) 모드 ============
+  // 점심 로직(state/candidatePairs/pickRandom/init)은 전혀 건드리지 않는 별도 모듈. 점심 화면과
+  // 같은 유틸(mergeRecord, enrichMenus, 카카오 검색 헬퍼)만 재사용하고, 저녁 전용 상태는 아래
+  // `dinner` 객체에만 둔다. 점심은 "빨리 한 곳"이 목적이지만 저녁은 "어떤 자리인지"가 먼저라
+  // (인원/분위기/술) 조건으로 좁힌 뒤 서로 종류가 다른 3곳을 카드로 비교해서 고르게 한다.
+  // 데이터에 저녁/술 정보가 없어서 카테고리·상호명·메뉴명 키워드로 추정한다(휴무일·라스트오더는
+  // 모름 — 영업 종료 시각만 startEndDesc 문자열에서 파싱).
+  var DINNER = {
+    RADIUS_OPTIONS: [300, 500, 700],
+    DEFAULT_RADIUS_M: 500,        // 사용자 확정(2026-11-23): 저녁 기본 반경 500m
+    RECENT_DAYS: 7,               // 사용자 확정: "지난번 갔던 곳" 회피 기간 = 일주일
+    MIN_CLOSE_MINUTES: 20 * 60,   // 이보다 일찍 닫는 곳은 저녁 후보에서 제외(시간 정보가 있을 때만)
+    PICK_COUNT: 3,
+    PARTY: ['2명', '3~4명', '5명 이상'],
+    VIBE: ['가볍게 한잔', '식사+반주', '고기·회식', '조용한 대화'],
+    DRINK: ['소주·맥주', '와인·하이볼', '막걸리·사케', '술 없이'],
+    // 가격대 칩은 "참고용": 후보를 빼지 않고 비슷한 가격대를 우선 노출하는 가산점으로만 쓴다.
+    PRICE: [
+      { label: '가볍게 · 메뉴 ~1.3만', name: '가볍게', min: 0, max: 13000 },
+      { label: '보통 · 1.3~2.5만', name: '보통', min: 13000, max: 25000 },
+      { label: '넉넉 · 2.5만~', name: '넉넉', min: 25000, max: Infinity }
+    ]
+  };
+  var DINNER_KIND_LABEL = { '술집':'술집', '고기·구이':'고기집', '회·일식':'회·일식', '전골·탕':'전골·탕', '중식':'중식', '치킨':'치킨', '양식':'양식', '아시안':'아시안', '한식':'한식' };
+  var DINNER_KIND_ICON = { '술집':'ph-beer-stein', '고기·구이':'ph-fire', '회·일식':'ph-fish', '전골·탕':'ph-cooking-pot', '중식':'ph-noodle', '치킨':'ph-bird', '양식':'ph-pizza', '아시안':'ph-bowl-food', '한식':'ph-bowl-food' };
+  var DN_DRINK_PLACE_NAME_KW = ['포차','호프','이자카야','주점','와인바','맥주','막걸리','사케','펍','오뎅바'];
+  var DN_EXCLUDE_PATH_KW = ['카페','디저트','베이커리','패스트푸드','도시락','김밥','분식','죽','샌드위치','간식'];
+  var DN_EXCLUDE_CUISINES = ['구내식당/한식뷔페', '간편식/식단관리'];
+  var DN_RAW_KW = ['횟집','초밥','스시','오마카세','사시미','일식','해물','생선','조개'];
+  var DN_MEAT_KW = ['육류','고기','구이','삼겹','갈비','곱창','막창','대창','양꼬치','족발','보쌈','오겹','항정','닭갈비','숯불','한우','소고기','돼지'];
+  var DN_CHINESE_KW = ['중식','중국요리','마라'];
+  var DN_STEW_KW = ['전골','탕','찌개','국밥','해장국','순대'];
+  var DN_CHICKEN_KW = ['치킨','통닭','닭강정'];
+  var DN_WESTERN_KW = ['양식','이탈리','파스타','스테이크','피자','레스토랑','와인','프랑스','브런치'];
+  var DN_ASIAN_KW = ['아시아','동남아','베트남','태국','인도','쌀국수','멕시칸','터키','샤브'];
+  var DN_DRINK_MENU_KW = ['소주','맥주','막걸리','와인','하이볼','사케','칵테일','생맥'];
+
+  var dinner = {
+    active: false, loaded: false, loading: false, enriching: false, error: '',
+    radiusM: (function(){
+      var v = storageGet('dinnerRadiusM', DINNER.DEFAULT_RADIUS_M);
+      return DINNER.RADIUS_OPTIONS.indexOf(v) !== -1 ? v : DINNER.DEFAULT_RADIUS_M;
+    })(),
+    sel: { party: null, vibe: null, drink: null, price: null },
+    raw: [], restaurants: [], incomplete: false, centerIsStation: true,
+    picks: [], shownIds: [], skippedIds: []
+  };
+
+  function dnHasAny(hay, kws){
+    for(var i=0;i<kws.length;i++){ if(hay.indexOf(kws[i]) !== -1) return true; }
+    return false;
+  }
+  function dnPath(r){ return categoryClassificationPath(r.categoryName); }
+  function dnMenuNames(r){ return (r.menuItems || []).map(function(m){ return m.name || ''; }).join(' '); }
+  function dnIsDrinkPlace(r){
+    return dnPath(r).indexOf('술집') !== -1 || dnHasAny(r.name || '', DN_DRINK_PLACE_NAME_KW);
+  }
+  function dnKind(r){
+    if(dnIsDrinkPlace(r)) return '술집';
+    var hay = dnPath(r) + ' ' + (r.name || '');
+    if(dnHasAny(hay, DN_RAW_KW)) return '회·일식';
+    if(dnHasAny(hay, DN_MEAT_KW)) return '고기·구이';
+    if(dnHasAny(hay, DN_CHINESE_KW)) return '중식';
+    if(dnHasAny(hay, DN_STEW_KW)) return '전골·탕';
+    if(dnHasAny(hay, DN_CHICKEN_KW)) return '치킨';
+    if(dnHasAny(hay, DN_WESTERN_KW)) return '양식';
+    if(dnHasAny(hay, DN_ASIAN_KW)) return '아시안';
+    return '한식';
+  }
+  // startEndDesc("09:00 ~ 21:30" 등, 여러 구간이면 마지막 구간)에서 영업 종료 시각(분)을 뽑는다.
+  // 자정을 넘기는 곳(17:00 ~ 02:00)은 +24h로 취급한다. 정보가 없거나 형식이 다르면 null(=판단 불가).
+  function dnCloseMinutes(openHours){
+    if(!openHours) return null;
+    var desc = openHours.startEndDesc || '';
+    if(/24\s*시간/.test(desc)) return 48 * 60;
+    var re = /(\d{1,2}):(\d{2})\s*[~\-–]\s*(\d{1,2}):(\d{2})/g, m, last = null;
+    while((m = re.exec(desc)) !== null) last = m;
+    if(!last) return null;
+    var start = parseInt(last[1], 10) * 60 + parseInt(last[2], 10);
+    var end = parseInt(last[3], 10) * 60 + parseInt(last[4], 10);
+    if(end <= start) end += 24 * 60;
+    return end;
+  }
+  function dnCloseLabel(endMinutes){
+    var t = endMinutes % (24 * 60);
+    var h = Math.floor(t / 60), mm = t % 60;
+    return (h < 10 ? '0' : '') + h + ':' + (mm < 10 ? '0' : '') + mm + '까지';
+  }
+  function dnMedianPrice(r){
+    var ps = (r.menuItems || []).map(function(m){ return Number(m.price); })
+      .filter(function(p){ return isFinite(p) && p >= 3000; }).sort(function(a,b){ return a-b; });
+    if(!ps.length) return null;
+    var mid = Math.floor(ps.length / 2);
+    return ps.length % 2 ? ps[mid] : Math.round((ps[mid-1] + ps[mid]) / 2);
+  }
+  function dnPriceBand(price){
+    if(price == null) return null;
+    for(var i=0;i<DINNER.PRICE.length;i++){
+      if(price >= DINNER.PRICE[i].min && price < DINNER.PRICE[i].max) return DINNER.PRICE[i];
+    }
+    return null;
+  }
+  function dnFormatManwon(price){
+    var man = price / 10000;
+    return (Math.round(man * 10) / 10) + '만원';
+  }
+  function dnSignals(r){
+    var kind = dnKind(r), drink = dnIsDrinkPlace(r), menuNames = dnMenuNames(r);
+    var priceMedian = dnMedianPrice(r);
+    return {
+      kind: kind, drink: drink,
+      hay: dnPath(r) + ' ' + (r.name || '') + ' ' + menuNames,
+      close: dnCloseMinutes(r.openHours),
+      priceMedian: priceMedian, band: dnPriceBand(priceMedian),
+      ansu: drink || dnHasAny(menuNames, DN_DRINK_MENU_KW) || ['고기·구이','회·일식','전골·탕','치킨'].indexOf(kind) !== -1,
+      walkMin: Math.max(1, Math.round((r.distanceM || 0) / CONFIG.WALK_SPEED_M_PER_MIN))
+    };
+  }
+  // 저녁 후보 자격. 점심의 isIncluded와 달리 "13시 이후 오픈" 제외를 쓰지 않는다(저녁 전용 술집이
+  // 바로 그 대상). 사용자가 직접 정한 포함/제외(manualOverride)는 점심과 똑같이 존중한다.
+  function dnEligible(r, ignoreHours){
+    if(r.manualOverride === false) return false;
+    if(r.manualOverride === true) return true;
+    if(!r.includedByGeometry) return false;
+    if(!dnIsDrinkPlace(r)){
+      if(DN_EXCLUDE_CUISINES.indexOf(r.cuisine) !== -1) return false;
+      if(dnHasAny(dnPath(r), DN_EXCLUDE_PATH_KW)) return false;
+    }
+    if(!ignoreHours){
+      var close = dnCloseMinutes(r.openHours);
+      if(close != null && close < DINNER.MIN_CLOSE_MINUTES) return false;
+    }
+    return true;
+  }
+  function dnScore(sig){
+    var s = 1, k = sig.kind, sel = dinner.sel, hay = sig.hay;
+    if(sel.vibe === '가볍게 한잔'){
+      if(k === '술집') s += 3; else if(k === '치킨') s += 2; else if(sig.ansu) s += 0.5;
+    } else if(sel.vibe === '식사+반주'){
+      if(['전골·탕','한식','고기·구이','회·일식','중식'].indexOf(k) !== -1) s += 2; else if(k === '술집') s += 1;
+    } else if(sel.vibe === '고기·회식'){
+      if(k === '고기·구이') s += 3.5; else if(k === '술집' || k === '치킨') s += 0.5;
+    } else if(sel.vibe === '조용한 대화'){
+      if(['양식','회·일식','아시안'].indexOf(k) !== -1) s += 2.5; else if(k === '전골·탕' || k === '한식') s += 0.5;
+      if(k === '고기·구이' || k === '치킨') s -= 1;
+      if(k === '술집'){ s += dnHasAny(hay, ['포차','호프']) ? -1.5 : (dnHasAny(hay, ['와인','이자카야']) ? 1 : 0); }
+    }
+    if(sel.drink === '소주·맥주'){
+      if(['술집','고기·구이','전골·탕','한식','치킨'].indexOf(k) !== -1) s += 1.5;
+      if(dnHasAny(hay, ['호프','포차','맥주','소주'])) s += 1;
+    } else if(sel.drink === '와인·하이볼'){
+      if(dnHasAny(hay, ['와인','하이볼','칵테일'])) s += 3;
+      if(k === '양식') s += 1.5;
+      if(hay.indexOf('이자카야') !== -1) s += 1.5;
+    } else if(sel.drink === '막걸리·사케'){
+      if(dnHasAny(hay, ['막걸리','사케','파전'])) s += 3;
+      if(dnHasAny(hay, ['이자카야','보쌈','수육','부침'])) s += 1.5;
+      if(k === '회·일식') s += 1;
+    }
+    if(sel.party === '2명'){
+      if(['양식','회·일식','아시안'].indexOf(k) !== -1) s += 1;
+    } else if(sel.party === '5명 이상'){
+      if(k === '고기·구이') s += 1.5; else if(k === '전골·탕' || k === '한식') s += 0.5;
+      if(dnHasAny(hay, ['단체','룸','회식'])) s += 1;
+    }
+    if(sel.price && sig.band && sig.band.label === sel.price) s += 1.5; // 참고용 가산점
+    if(sig.close != null && sig.close >= DINNER.MIN_CLOSE_MINUTES) s += 0.3;
+    return s;
+  }
+
+  // ---- 최근 간 곳(7일) 기록 ----
+  function dnPad(n){ return (n < 10 ? '0' : '') + n; }
+  function dnToday(){ var d = new Date(); return d.getFullYear() + '-' + dnPad(d.getMonth()+1) + '-' + dnPad(d.getDate()); }
+  function dnDaysSince(dateStr){
+    var p = String(dateStr).split('-');
+    var then = new Date(+p[0], +p[1]-1, +p[2]);
+    var now = new Date();
+    var today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    return Math.round((today - then) / 86400000);
+  }
+  // 기간이 지났거나 날짜가 깨진 항목은 읽을 때 같이 정리한다.
+  function dnHistory(){
+    var raw = storageGet('dinnerHistory', {}), out = {}, changed = false;
+    Object.keys(raw).forEach(function(id){
+      var d = dnDaysSince(raw[id]);
+      if(isFinite(d) && d >= 0 && d < DINNER.RECENT_DAYS) out[id] = raw[id]; else changed = true;
+    });
+    if(changed) storageSet('dinnerHistory', out);
+    return out;
+  }
+  function dnMarkVisited(id){
+    var h = dnHistory(); h[id] = dnToday(); storageSet('dinnerHistory', h);
+    renderDinnerHistoryNote();
+  }
+
+  // ---- 후보 풀 / 3곳 뽑기 ----
+  function dnPool(){
+    var hist = dnHistory();
+    return dinner.restaurants.filter(function(r){
+      if(!dnEligible(r, false)) return false;
+      return !(dinner.sel.drink === '술 없이' && dnIsDrinkPlace(r));
+    }).map(function(r){
+      var sig = dnSignals(r);
+      return { r: r, sig: sig, score: dnScore(sig), daysAgo: hist[r.id] !== undefined ? dnDaysSince(hist[r.id]) : null };
+    });
+  }
+  // 신선한(최근 안 간 + 아직 안 보여준) 후보부터 단계적으로 채우되, 각 단계 안에서는 서로 다른
+  // 종류(고기집/술집/일식…)를 우선해서 "3곳이 전부 비슷한 집"이 되지 않게 한다.
+  function dnChoose(count, avoidIds, usedKindsIn){
+    var pool = dnPool();
+    var avoid = function(p){ return avoidIds.indexOf(p.r.id) === -1; };
+    var tiers = [
+      pool.filter(function(p){ return p.daysAgo === null && avoid(p); }),
+      pool.filter(avoid),
+      pool.filter(function(p){ return p.daysAgo === null; }),
+      pool
+    ];
+    var chosen = [], chosenIds = {}, kinds = {};
+    // 기본은 종류당 1곳(비교가 목적이라). 다만 "고기·회식"처럼 사용자가 특정 종류를 콕 집은 경우엔
+    // 그 종류만 3곳이 나와도 되므로 제한을 푼다.
+    var maxPerKind = dinner.sel.vibe === '고기·회식' ? DINNER.PICK_COUNT : 1;
+    (usedKindsIn || []).forEach(function(k){ kinds[k] = (kinds[k] || 0) + 1; });
+    tiers.forEach(function(tier){
+      if(chosen.length >= count) return;
+      var ranked = tier.filter(function(p){ return !chosenIds[p.r.id]; }).map(function(p){
+        return { p: p, key: p.score + Math.random() * 1.5 };
+      }).sort(function(a, b){ return b.key - a.key; }).map(function(x){ return x.p; });
+      [true, false].forEach(function(uniqueOnly){
+        ranked.forEach(function(p){
+          if(chosen.length >= count || chosenIds[p.r.id]) return;
+          if(uniqueOnly && (kinds[p.sig.kind] || 0) >= maxPerKind) return;
+          chosen.push(p); chosenIds[p.r.id] = true; kinds[p.sig.kind] = (kinds[p.sig.kind] || 0) + 1;
+        });
+      });
+    });
+    return chosen;
+  }
+  function dnPickAll(){
+    var avoid = dinner.shownIds.concat(dinner.skippedIds);
+    dinner.picks = dnChoose(DINNER.PICK_COUNT, avoid, []);
+    dinner.picks.forEach(function(p){ if(dinner.shownIds.indexOf(p.r.id) === -1) dinner.shownIds.push(p.r.id); });
+  }
+  function dnReplaceAt(idx){
+    var removed = dinner.picks[idx];
+    if(removed && dinner.skippedIds.indexOf(removed.r.id) === -1) dinner.skippedIds.push(removed.r.id);
+    var others = dinner.picks.filter(function(p, i){ return i !== idx; });
+    var avoid = dinner.shownIds.concat(dinner.skippedIds, others.map(function(p){ return p.r.id; }));
+    var repl = dnChoose(1, avoid, others.map(function(p){ return p.sig.kind; }))[0];
+    if(repl){
+      dinner.picks[idx] = repl;
+      if(dinner.shownIds.indexOf(repl.r.id) === -1) dinner.shownIds.push(repl.r.id);
+    } else {
+      dinner.picks.splice(idx, 1);
+    }
+    renderDinner();
+  }
+
+  // ---- 데이터 로딩 ----
+  function fetchDinnerRaw(){
+    var geocoder = new kakao.maps.services.Geocoder();
+    var places = new kakao.maps.services.Places();
+    var officeCoord, stationA, stationB, railOk = false;
+    return geocodeAddress(geocoder, CONFIG.OFFICE_ADDRESS).then(function(coord){
+      officeCoord = coord;
+      return Promise.all([
+        keywordFirst(places, CONFIG.RAIL_STATION_A_QUERY, '1호선'),
+        keywordFirst(places, CONFIG.RAIL_STATION_B_QUERY, '1호선')
+      ]).catch(function(){ return null; });
+    }).then(function(stations){
+      if(stations){ stationA = stations[0]; stationB = stations[1]; railOk = true; }
+      // 저녁은 사무실이 아니라 가산디지털단지역이 기준점(도보 시간·반경 모두). 역 검색이 실패하면
+      // 사무실 좌표로 대신하고 화면에도 그렇게 표시한다.
+      var center = stationA || officeCoord;
+      dinner.centerIsStation = !!stationA;
+      var officeSign = railOk ? crossSign(stationA, stationB, officeCoord) : null;
+      return fetchAllNearby(places, center, dinner.radiusM).then(function(res){
+        dinner.incomplete = res.incomplete;
+        return res.list.map(function(p){
+          var lat = +p.y, lng = +p.x;
+          var distanceM = Math.round(haversine(center, { lat: lat, lng: lng }));
+          var side = railOk ? crossSign(stationA, stationB, { lat: lat, lng: lng }) : null;
+          return {
+            id: 'kakao:' + p.id, source: 'kakao', name: p.place_name, categoryName: p.category_name,
+            phone: p.phone, address: p.road_address_name || p.address_name, lat: lat, lng: lng,
+            distanceM: distanceM, placeUrl: p.place_url, railSide: side,
+            includedByGeometry: distanceM <= dinner.radiusM && (!railOk || side === officeSign),
+            kakaoPlaceId: p.id
+          };
+        });
+      });
+    });
+  }
+  function dnRebuildRestaurants(){
+    var overrides = loadOverrides();
+    dinner.restaurants = dinner.raw.map(function(r){ return mergeRecord(r, overrides); });
+  }
+  function loadDinnerData(){
+    if(dinner.loading) return;
+    dinner.loading = true; dinner.loaded = false; dinner.enriching = false; dinner.error = '';
+    dinner.picks = []; dinner.shownIds = []; dinner.skippedIds = [];
+    renderDinner();
+    var overridesP = fetchSharedOverrides().then(function(shared){ state.sharedOverrides = shared; });
+    // 점심 init이 이미 SDK를 불러왔으면(window.kakao) 스크립트 태그를 또 붙이지 않는다.
+    var sdkP = (window.kakao && window.kakao.maps) ? Promise.resolve() : loadKakaoSdk();
+    Promise.all([overridesP, sdkP.then(kakaoReady).then(fetchDinnerRaw)]).then(function(results){
+      dinner.raw = results[1];
+      dnRebuildRestaurants();
+      // 저녁 후보가 될 만한 곳(카테고리 기준)만 메뉴·영업시간을 보강해서 호출 수를 줄인다.
+      // 점심이 이미 받아둔 곳은 24시간 캐시를 그대로 쓴다.
+      var byId = {};
+      dinner.restaurants.forEach(function(r){ byId[r.id] = r; });
+      var subset = dinner.raw.filter(function(raw){
+        var merged = byId[raw.id];
+        if(!merged || !dnEligible(merged, true)) return false;
+        if(merged.naverPlaceId) raw.naverPlaceId = merged.naverPlaceId;
+        return true;
+      });
+      dinner.enriching = true;
+      renderDinner();
+      return enrichMenus(subset);
+    }).then(function(){
+      dnRebuildRestaurants();
+      dinner.loaded = true; dinner.loading = false; dinner.enriching = false;
+      dnPickAll();
+      renderDinner();
+    }).catch(function(err){
+      console.warn('[lunch-recommender] 저녁 후보 불러오기 실패:', err && err.message);
+      dinner.loading = false; dinner.enriching = false;
+      dinner.error = '저녁 후보를 불러오지 못했어요. 잠시 후 다시 시도해주세요.';
+      renderDinner();
+    });
+  }
+
+  // ---- 렌더링 ----
+  function dnRenderChipGroup(containerId, options, key){
+    var c = $(containerId);
+    if(!c) return;
+    c.innerHTML = '';
+    options.forEach(function(opt){
+      var label = typeof opt === 'string' ? opt : opt.label;
+      var chip = el('button', 'chip' + (dinner.sel[key] === label ? ' active' : ''), escapeHtml(label));
+      chip.type = 'button';
+      chip.disabled = dinner.loading;
+      chip.addEventListener('click', function(){
+        dinner.sel[key] = dinner.sel[key] === label ? null : label; // 한 번 더 누르면 해제
+        dnOnSelectionChange();
+      });
+      c.appendChild(chip);
+    });
+  }
+  function dnRenderRadiusChips(){
+    var c = $('dn-chips-radius');
+    if(!c) return;
+    c.innerHTML = '';
+    DINNER.RADIUS_OPTIONS.forEach(function(opt){
+      var chip = el('button', 'chip' + (dinner.radiusM === opt ? ' active' : ''), opt + 'm');
+      chip.type = 'button';
+      chip.disabled = dinner.loading;
+      chip.addEventListener('click', function(){
+        if(dinner.radiusM === opt) return;
+        dinner.radiusM = opt;
+        storageSet('dinnerRadiusM', opt);
+        $('pageSub').textContent = dnPageSub();
+        loadDinnerData();
+      });
+      c.appendChild(chip);
+    });
+  }
+  function dnPageSub(){
+    return (dinner.centerIsStation ? '가산디지털단지역' : '강의장') + ' 반경 ' + dinner.radiusM + 'm · 저녁/반주';
+  }
+  function dnOnSelectionChange(){
+    dinner.shownIds = []; dinner.skippedIds = [];
+    if(dinner.loaded) dnPickAll();
+    renderDinner();
+  }
+  function renderDinnerHistoryNote(){
+    var note = $('dnHistoryNote');
+    if(!note) return;
+    var n = Object.keys(dnHistory()).length;
+    note.innerHTML = '';
+    if(!n) return;
+    note.appendChild(document.createTextNode('최근 ' + DINNER.RECENT_DAYS + '일 안에 간 ' + n + '곳은 뒤로 미뤄뒀어요 · '));
+    var clear = el('button', 'reset-link', '기록 지우기');
+    clear.type = 'button';
+    clear.style.display = 'inline';
+    clear.addEventListener('click', function(){
+      storageSet('dinnerHistory', {});
+      if(dinner.loaded){ dnPickAll(); }
+      renderDinner();
+    });
+    note.appendChild(clear);
+  }
+  function dnReason(p){
+    var s = p.sig, sel = dinner.sel, parts = [];
+    var wanted = sel.vibe || sel.drink;
+    if(wanted && p.score >= 3.5) parts.push('\'' + wanted + '\'에 잘 맞아요');
+    parts.push(DINNER_KIND_LABEL[s.kind]);
+    parts.push(s.close != null ? dnCloseLabel(s.close).replace('까지', '까지 영업') : '영업시간 미확인');
+    parts.push((dinner.centerIsStation ? '역에서 ' : '') + '도보 약 ' + s.walkMin + '분');
+    return parts.join(' · ');
+  }
+  function dnBadge(text, cls){ return el('span', 'dn-badge' + (cls ? ' ' + cls : ''), escapeHtml(text)); }
+  function dnRenderCard(p, idx){
+    var r = p.r, s = p.sig;
+    var card = el('div', 'dinner-card');
+    var photo = pickTilePhoto(r);
+    if(photo){
+      var img = document.createElement('img');
+      img.className = 'dinner-card-photo';
+      img.alt = r.name + ' 사진';
+      img.referrerPolicy = 'no-referrer'; // src보다 먼저 설정해야 핫링크 차단(403)을 피한다(HANDOFF 참고)
+      img.src = photo.url;
+      img.addEventListener('click', function(){ openPhotoLightbox(photo.url, r.name); });
+      img.addEventListener('error', function(){
+        var ph = el('div', 'dinner-card-photo-ph', '<i class="ph ' + (DINNER_KIND_ICON[s.kind] || 'ph-bowl-food') + '" aria-hidden="true"></i>');
+        if(img.parentNode) img.parentNode.replaceChild(ph, img);
+      });
+      card.appendChild(img);
+    } else {
+      card.appendChild(el('div', 'dinner-card-photo-ph', '<i class="ph ' + (DINNER_KIND_ICON[s.kind] || 'ph-bowl-food') + '" aria-hidden="true"></i>'));
+    }
+    var body = el('div', 'dinner-card-body');
+    body.appendChild(el('h3', 'dinner-card-name', escapeHtml(r.name)));
+    var metaParts = [];
+    if(r.categoryName) metaParts.push(r.categoryName.replace(/^음식점\s*>\s*/, ''));
+    if(r.distanceM != null) metaParts.push((dinner.centerIsStation ? '역에서 ' : '') + r.distanceM + 'm');
+    body.appendChild(el('p', 'dinner-card-meta', escapeHtml(metaParts.join(' · '))));
+    body.appendChild(el('p', 'dinner-card-reason', escapeHtml(dnReason(p))));
+
+    var badges = el('div', 'dinner-badges');
+    if(s.ansu) badges.appendChild(dnBadge('반주 OK', 'lime'));
+    if(s.priceMedian != null) badges.appendChild(dnBadge('메뉴 중간값 약 ' + dnFormatManwon(s.priceMedian) + (s.band ? ' · ' + s.band.name : '')));
+    else badges.appendChild(dnBadge('가격 미확인'));
+    if(p.daysAgo !== null) badges.appendChild(dnBadge(p.daysAgo === 0 ? '오늘 다녀옴' : p.daysAgo + '일 전 방문', 'pink'));
+    body.appendChild(badges);
+
+    var items = (r.menuItems || []).filter(function(m){ return m && m.name; });
+    var headline = items.filter(function(m){ return m.isRecommend; })[0] || items[0];
+    if(headline){
+      var rest = items.filter(function(m){ return m !== headline; }).slice(0, 2);
+      body.appendChild(el('p', 'dinner-menu', escapeHtml('대표 · ' + formatMenuItem(headline) + rest.map(function(m){ return '\n' + formatMenuItem(m); }).join(''))));
+      body.lastChild.style.whiteSpace = 'pre-line';
+    }
+
+    var actions = el('div', 'dinner-card-actions');
+    var skipBtn = el('button', 'btn btn-outline', '<i class="ph ph-prohibit" aria-hidden="true"></i>이거 빼기');
+    skipBtn.type = 'button';
+    skipBtn.addEventListener('click', function(){ dnReplaceAt(idx); });
+    actions.appendChild(skipBtn);
+    var goBtn = el('button', 'btn btn-outline-accent', '<i class="ph ph-check" aria-hidden="true"></i>여기로 정했어요');
+    goBtn.type = 'button';
+    goBtn.addEventListener('click', function(){
+      dnMarkVisited(r.id);
+      goBtn.disabled = true;
+      goBtn.textContent = '기록했어요 · ' + DINNER.RECENT_DAYS + '일간 제외';
+    });
+    actions.appendChild(goBtn);
+    if(r.lat != null && r.lng != null){
+      var dir = el('a', 'btn btn-outline', '<i class="ph ph-navigation-arrow" aria-hidden="true"></i>길찾기');
+      dir.href = 'https://map.kakao.com/link/to/' + encodeURIComponent(r.name) + ',' + r.lat + ',' + r.lng;
+      dir.target = '_blank'; dir.rel = 'noopener';
+      actions.appendChild(dir);
+    }
+    var mapLink = el('a', 'btn btn-outline', '지도에서 보기');
+    mapLink.href = r.placeUrl || ('https://map.kakao.com/?q=' + encodeURIComponent(r.name));
+    mapLink.target = '_blank'; mapLink.rel = 'noopener';
+    actions.appendChild(mapLink);
+    body.appendChild(actions);
+    card.appendChild(body);
+    return card;
+  }
+  function renderDinner(){
+    if(!$('dinnerSection')) return;
+    dnRenderChipGroup('dn-chips-party', DINNER.PARTY, 'party');
+    dnRenderChipGroup('dn-chips-vibe', DINNER.VIBE, 'vibe');
+    dnRenderChipGroup('dn-chips-drink', DINNER.DRINK, 'drink');
+    dnRenderChipGroup('dn-chips-price', DINNER.PRICE, 'price');
+    dnRenderRadiusChips();
+    renderDinnerHistoryNote();
+    var btn = $('dnPickBtn'), help = $('dnHelp'), picksEl = $('dnPicks');
+    picksEl.innerHTML = '';
+    btn.disabled = dinner.loading || !dinner.loaded;
+    btn.textContent = dinner.picks.length ? '다시 뽑기 (3곳 전체 교체)' : '저녁 3곳 골라줘!';
+    if(dinner.active) $('pageSub').textContent = dnPageSub();
+    if(dinner.loading){
+      help.hidden = false;
+      help.textContent = dinner.enriching ? '메뉴·영업시간을 확인하는 중이에요… (처음엔 조금 걸려요)' : '가산디지털단지역 근처 식당을 찾는 중이에요…';
+      picksEl.appendChild(el('div', 'dinner-empty', dinner.enriching ? '저녁 영업하는 곳을 가려내는 중이에요…' : '식당을 찾는 중이에요…'));
+      return;
+    }
+    if(dinner.error){
+      help.hidden = true;
+      var errBox = el('div', 'dinner-empty', escapeHtml(dinner.error) + '<br>');
+      var retry = el('button', 'btn btn-outline', '다시 시도');
+      retry.type = 'button'; retry.style.marginTop = '12px';
+      retry.addEventListener('click', loadDinnerData);
+      errBox.appendChild(retry);
+      picksEl.appendChild(errBox);
+      return;
+    }
+    help.hidden = !dinner.incomplete;
+    if(dinner.incomplete) help.textContent = '⚠️ 상점이 워낙 밀집해 일부가 누락됐을 수 있어요. 반경을 줄여보세요.';
+    if(!dinner.loaded) return;
+    if(dinner.picks.length === 0){
+      picksEl.appendChild(el('div', 'dinner-empty', '조건에 맞는 저녁 후보가 없어요. 조건을 풀거나 반경을 넓혀보세요.'));
+      return;
+    }
+    dinner.picks.forEach(function(p, idx){ picksEl.appendChild(dnRenderCard(p, idx)); });
+  }
+  function setMode(mode){
+    var isDinner = mode === 'dinner';
+    dinner.active = isDinner;
+    document.body.classList.toggle('dinner-mode', isDinner);
+    $('dinnerSection').hidden = !isDinner;
+    Array.prototype.forEach.call(document.querySelectorAll('#modeToggle .mode-btn'), function(b){
+      var on = b.getAttribute('data-mode') === mode;
+      b.classList.toggle('active', on);
+      b.setAttribute('aria-pressed', on ? 'true' : 'false');
+    });
+    if(isDinner){
+      $('pageSub').textContent = dnPageSub();
+      if(!dinner.loaded && !dinner.loading) loadDinnerData(); else renderDinner();
+    } else {
+      updatePageSub();
+    }
+  }
+  function wireDinner(){
+    Array.prototype.forEach.call(document.querySelectorAll('#modeToggle .mode-btn'), function(b){
+      b.addEventListener('click', function(){ setMode(b.getAttribute('data-mode')); });
+    });
+    $('dnPickBtn').addEventListener('click', function(){
+      if(!dinner.loaded) return;
+      dnPickAll();
+      renderDinner();
+    });
+    $('dnReset').addEventListener('click', function(){
+      dinner.sel = { party: null, vibe: null, drink: null, price: null };
+      dnOnSelectionChange();
+    });
+    if(new URLSearchParams(location.search).get('tab') === 'dinner') setMode('dinner');
+  }
+
   // ============ 부트스트랩 ============
   function init(){
     state.recentIds = [];
@@ -3181,6 +3812,7 @@
     });
     $('researchBtn').addEventListener('click', init);
     $('retryLiveBtn').addEventListener('click', init);
+    wireDinner();
     var menuSearchDebounceTimer = null;
     $('menuSearchInput').addEventListener('input', function(){
       var value = this.value;
