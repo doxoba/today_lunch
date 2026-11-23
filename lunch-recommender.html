@@ -3147,6 +3147,7 @@
       return DINNER.RADIUS_OPTIONS.indexOf(v) !== -1 ? v : DINNER.DEFAULT_RADIUS_M;
     })(),
     sel: { party: null, vibe: null, drink: null, price: null },
+    searchExpanded: false, // 검색 결과가 12곳을 넘을 때 "더 보기"로 전부 펼쳤는지
     query: '', // 메뉴 검색어. 비어있지 않으면 3곳 추천 대신 검색 결과를 보여준다.
     raw: [], restaurants: [], incomplete: false, centerIsStation: true,
     picks: [], shownIds: [], skippedIds: []
@@ -3397,6 +3398,12 @@
       }
     });
     function byRelevance(a, b){
+      // "회" 같은 한 글자 검색어는 육회비빔밥·오리회전구이처럼 우연히 글자만 겹친 가게가 많아서,
+      // 회/생선 검색이면 횟집 카테고리인 곳을 먼저 올린다(나머지는 "더 보기"로 펼쳐서 확인).
+      if(fishQuery){
+        var fa = dnIsRawFishPlace(a.r) ? 1 : 0, fb = dnIsRawFishPlace(b.r) ? 1 : 0;
+        if(fa !== fb) return fb - fa;
+      }
       if(b.matched.length !== a.matched.length) return b.matched.length - a.matched.length;
       return (a.r.distanceM || 0) - (b.r.distanceM || 0);
     }
@@ -3418,17 +3425,31 @@
       return;
     }
     var LIMIT = 12;
+    var expanded = dinner.searchExpanded;
+    // 12곳을 넘으면 나머지는 "더 보기"로 펼친다. 펼침 상태는 검색어가 바뀌면 다시 접힌다.
+    function appendToggle(totalCount){
+      if(totalCount <= LIMIT) return;
+      var wrap = el('div', null);
+      wrap.style.cssText = 'grid-column:1/-1; text-align:center;';
+      var btn = el('button', 'btn btn-outline', expanded ? '접기' : '나머지 ' + (totalCount - LIMIT) + '곳 더 보기');
+      btn.type = 'button'; btn.style.flex = 'none'; btn.style.minWidth = '200px';
+      btn.addEventListener('click', function(){ dinner.searchExpanded = !dinner.searchExpanded; renderDinner(); });
+      wrap.appendChild(btn);
+      picksEl.appendChild(wrap);
+    }
     if(res.hits.length){
-      var head = el('div', 'dinner-empty', escapeHtml('\'' + dinner.query.trim() + '\' 메뉴가 있는 곳 ' + res.hits.length + '곳' + (res.hits.length > LIMIT ? ' (가까운 순 ' + LIMIT + '곳만 표시)' : '')));
+      var head = el('div', 'dinner-empty', escapeHtml('\'' + dinner.query.trim() + '\' 메뉴가 있는 곳 ' + res.hits.length + '곳' + (res.hits.length > LIMIT && !expanded ? ' (' + LIMIT + '곳만 표시)' : '')));
       head.style.padding = '12px';
       picksEl.appendChild(head);
-      res.hits.slice(0, LIMIT).forEach(function(p){ picksEl.appendChild(dnRenderCard(p, null)); });
+      (expanded ? res.hits : res.hits.slice(0, LIMIT)).forEach(function(p){ picksEl.appendChild(dnRenderCard(p, null)); });
+      appendToggle(res.hits.length);
     }
     if(res.fallback.length){
       var head2 = el('div', 'dinner-empty', '메뉴판은 못 가져왔지만 횟집이에요 (' + res.fallback.length + '곳) — 방어 철인지는 가게에 확인해보세요');
       head2.style.padding = '12px';
       picksEl.appendChild(head2);
-      res.fallback.slice(0, LIMIT).forEach(function(p){ picksEl.appendChild(dnRenderCard(p, null)); });
+      (expanded ? res.fallback : res.fallback.slice(0, LIMIT)).forEach(function(p){ picksEl.appendChild(dnRenderCard(p, null)); });
+      appendToggle(res.fallback.length);
     }
   }
   function dnSetRadius(m){
@@ -3731,7 +3752,7 @@
       var value = this.value;
       $('dnSearchClear').hidden = !value.trim();
       clearTimeout(dnSearchTimer);
-      dnSearchTimer = setTimeout(function(){ dinner.query = value; renderDinner(); }, 200);
+      dnSearchTimer = setTimeout(function(){ dinner.query = value; dinner.searchExpanded = false; renderDinner(); }, 200);
     });
     $('dnSearchClear').addEventListener('click', function(){
       $('dnSearchInput').value = '';
