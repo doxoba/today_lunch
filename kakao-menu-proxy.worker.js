@@ -289,7 +289,7 @@ export default {
   // "0 0 * * *"(UTC 0시 = KST 9시)를 등록해두면 이 함수가 매일 그 시각에 자동 실행된다.
   // 코드만으로는 cron 자체를 등록할 수 없어 대시보드(또는 wrangler.toml) 설정이 별도로 필요함.
   //
-  // 알림용 폴링 cron("*/20 0-3 * * MON-FRI" = KST 평일 09:00~12:40, 20분마다)도 같은 방식으로 추가
+  // 알림용 폴링 cron("*/5 0-3 * * MON-FRI" = KST 평일 09:00~12:55, 5분마다)도 같은 방식으로 추가
   // (요일을 숫자로 쓰면 안 된다 — Cloudflare cron은 1=일요일이라 "1-5"는 일~목이 됨)
   // 등록한다. 두 cron이 09:00에 동시에 깨어나 같은 업데이트를 각각 초안으로 만들지 않도록, 예열
   // cron은 예열만 / 그 외 cron은 감지·컨펌 요청만 맡는다(감지 과정에서 대상 채널 캐시도 갱신됨).
@@ -312,8 +312,12 @@ function isCafeteriaPostSource(source) {
   return source === 'post' || source === 'post-guess';
 }
 
+// 포스트 선택 로직을 바꾼 배포 뒤에도 colo별 Cache API에 옛 로직으로 만든 응답이 최대 1~3시간
+// 남아있을 수 있어서, 선택 규칙이 바뀔 때마다 이 값을 올려 캐시 키 자체를 새로 만든다.
+const CAFETERIA_SCHEMA_VERSION = 'v2';
 function cafeteriaCacheRequest(channelId) {
-  return new Request('https://kakao-menu-proxy.internal/cafeteria-menu?channel=' + encodeURIComponent(channelId));
+  return new Request('https://kakao-menu-proxy.internal/cafeteria-menu?channel=' + encodeURIComponent(channelId) +
+    '&schema=' + CAFETERIA_SCHEMA_VERSION);
 }
 
 // ---- 채널 "소식"(포스트)으로 매일 메뉴를 올리는 패턴 ----
@@ -392,10 +396,24 @@ function scoreCafeteriaPostTitle(title) {
 }
 function pickCafeteriaPostByKeywordScore(posts) {
   const now = Date.now();
+  const today = getKstDateString();
   const candidates = (posts || [])
     .filter((p) => p && p.status === 'published' && !p.is_private && !p.unlisted)
     .filter((p) => now - (p.published_at || p.created_at || 0) <= KEYWORD_SCORE_LOOKBACK_MS)
-    .map((p) => ({ post: p, score: scoreCafeteriaPostTitle(p.title) }))
+    .map((p) => {
+      let score = scoreCafeteriaPostTitle(p.title);
+      // 씽씽푸드(_gdqxdn)는 평소엔 제목을 "메뉴 "로 올리다가, 2026-10-23(금)엔 제목이 아예 빈
+      // 고정(pinned) 글에 "10월 23일 금요일 메뉴" 이미지를 올렸다. 점수 0이라 후보에서 탈락해
+      // 어제(목) "메뉴 " 글이 계속 뽑혔다. 제목이 비어 판단할 글자가 없는 이미지 글은, 오늘자로
+      // 볼 수 있는 시각(isTimestampForToday)에 올라온 경우에 한해 "메뉴" 한 번 언급과 같은
+      // 1점으로 쳐서 동점이면 최신 글이 이기게 한다. 오래된 빈 제목 글(예: 계속 고정된 공지)이
+      // 새 메뉴 글을 이기지 못하도록 오늘자 조건을 붙였다.
+      if (score === 0 && !(typeof p.title === 'string' && p.title.trim()) &&
+          isTimestampForToday(p.published_at || p.created_at || 0, today)) {
+        score = 1;
+      }
+      return { post: p, score };
+    })
     .filter((c) => c.score > 0);
   if (!candidates.length) return null;
   candidates.sort((a, b) => {
@@ -616,7 +634,7 @@ async function refreshCafeteriaChannel(env, channelId) {
 // 보냄 → 메리가 링크의 확인 페이지에서 버튼을 눌러야만 실제 발송(sendTeamGallery). 자동 발송
 // 경로는 없다.
 //
-// 식당마다 사진/글이 올라오는 시각이 달라 폴링 주기(20분)마다 한둘씩만 새로 감지되는데, 그때마다
+// 식당마다 사진/글이 올라오는 시각이 달라 폴링 주기(5분)마다 한둘씩만 새로 감지되는데, 그때마다
 // 바로바로 컨펌 요청을 보내면 팀 채널에도 식당별로 따로따로 나가게 된다(2026-09-29 실사용 중 확인).
 // 그래서 "그날 아직 결정되지 않은 전체 목록"을 notify-compile:{date}에 들고 있다가, 새 항목이
 // 생길 때마다 그 누적 목록 전체로 초안을 새로 만들어 다시 컨펌을 요청한다. Incoming Webhook은
@@ -682,35 +700,37 @@ async function detectTargetUpdate(env, target, today, weekday) {
   let photoSource = null; // 팀 채널 갤러리 발송 때 이 Worker가 직접 사진 바이트를 구하는 방법
   let note = null;
 
-  if (target.manual || target.weekly) {
-    // 돈토처럼 "정보 편집" 패널에서 매일 직접 올리는 사진(manual)과 주간 식단표(weekly)를 둘 다
-    // 켜둔 식당도 있다 — 그날그날 어느 쪽에 올렸는지 몰라도 되도록 매일 사진을 먼저 확인하고,
-    // 없으면 주간 식단표를 확인한다(2026-09-29 실사용 중 돈토가 매일 사진 쪽에만 올라와서 주간
-    // 식단표만 보던 기존 코드가 놓쳤던 걸 발견해 추가함).
-    if (target.manual) {
-      const raw = await env.REVIEWS.get(cafeteriaManualKey(target.placeId));
-      const record = raw ? JSON.parse(raw) : null;
-      if (record && record.date === today) {
-        kind = 'manual';
-        signature = 'manual|' + record.uploadedAt;
-        imageUrl = WORKER_BASE_URL + '/cafeteria/image.jpg?placeId=' + encodeURIComponent(target.placeId) +
-          '&manual=1&v=' + record.uploadedAt;
-        photoSource = { type: 'manual', placeId: target.placeId };
-      }
+  // 감지 순서: "정보 편집"에서 사람이 직접 올린 것(매일 사진 → 주간 식단표) → 카카오 채널.
+  // 모든 대상에 같은 순서를 적용한다 — 직접 올린 건 사람이 일부러 넣은 값이라 카카오 채널보다
+  // 우선한다(앱 화면의 우선순위와도 같다). 예전엔 NOTIFY_TARGETS의 manual/weekly 플래그가 있는
+  // 식당만 직접 올린 걸 봐서, 윤스푸드처럼 카톡 소식이 늦어 목요일 칸에 직접 올린 것(2026-10-22)이
+  // 감지되지 않고 컨펌 요청이 안 오는 문제가 있었다. KV에 없으면 그냥 건너뛴다(조회 비용만 듦).
+  // 매일 사진(manual)과 주간 식단표(weekly)를 둘 다 켜둔 식당(돈토)도 있어서 매일 사진을 먼저
+  // 확인하고, 없으면 주간 식단표를 확인한다.
+  {
+    const raw = await env.REVIEWS.get(cafeteriaManualKey(target.placeId));
+    const record = raw ? JSON.parse(raw) : null;
+    if (record && record.date === today) {
+      kind = 'manual';
+      signature = 'manual|' + record.uploadedAt;
+      imageUrl = WORKER_BASE_URL + '/cafeteria/image.jpg?placeId=' + encodeURIComponent(target.placeId) +
+        '&manual=1&v=' + record.uploadedAt;
+      photoSource = { type: 'manual', placeId: target.placeId };
     }
-    if (!kind && target.weekly) {
-      const raw = await env.REVIEWS.get(cafeteriaWeeklyKey(target.placeId, weekday));
-      const record = raw ? JSON.parse(raw) : null;
-      if (record && record.weekOf === getKstMondayDateString()) {
-        kind = 'weekly';
-        signature = 'weekly|' + record.uploadedAt;
-        imageUrl = WORKER_BASE_URL + '/cafeteria/image.jpg?placeId=' + encodeURIComponent(target.placeId) +
-          '&weekday=' + weekday + '&v=' + record.uploadedAt;
-        photoSource = { type: 'weekly', placeId: target.placeId, weekday };
-      }
+  }
+  if (!kind) {
+    const raw = await env.REVIEWS.get(cafeteriaWeeklyKey(target.placeId, weekday));
+    const record = raw ? JSON.parse(raw) : null;
+    if (record && record.weekOf === getKstMondayDateString()) {
+      kind = 'weekly';
+      signature = 'weekly|' + record.uploadedAt;
+      imageUrl = WORKER_BASE_URL + '/cafeteria/image.jpg?placeId=' + encodeURIComponent(target.placeId) +
+        '&weekday=' + weekday + '&v=' + record.uploadedAt;
+      photoSource = { type: 'weekly', placeId: target.placeId, weekday };
     }
-    if (!kind) return null;
-  } else {
+  }
+
+  if (!kind && target.channelId) {
     const tracked = await refreshCafeteriaChannel(env, target.channelId);
     if (!tracked) return null;
     if (tracked.source === 'post') {
@@ -738,6 +758,7 @@ async function detectTargetUpdate(env, target, today, weekday) {
     imageUrl = buildNotifyImageProxyUrl(tracked.imageUrl);
     photoSource = { type: 'url', url: tracked.imageUrl };
   }
+  if (!kind) return null;
 
   const prevRaw = await env.REVIEWS.get(notifyKey(target.placeId));
   const prev = prevRaw ? JSON.parse(prevRaw) : null;
